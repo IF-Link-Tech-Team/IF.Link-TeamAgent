@@ -41,30 +41,44 @@ function ended(error: unknown): string {
 }
 export interface Tally { skipped: number }
 /**
+ * Which part of the agent a Feishu call came from. The per-subcommand split says what was called (`api GET`); this says
+ * why, which is what a quota decision reads: a sweep, a thread poll, an agent reading context, or a send.
+ */
+export type LarkSite = 'sweep' | 'thread' | 'read' | 'write' | 'chats' | 'other'
+export interface LarkCallStats { total: number; byCommand: Record<string, number>; bySite: Record<string, number> }
+/**
  * Process-wide count of Feishu CLI calls, so a Source can report what its own polling costs the tenant's monthly API
  * quota. The calls that matter are the ones no agent ever sees: the sweeps and the polls.
  */
-const larkCalls = { total: 0, byCommand: new Map<string, number>() }
-/** How many Feishu CLI calls this process made, in total and per subcommand (`im +chat-list`, `api GET`, ...). */
-export function larkCallStats(): { total: number; byCommand: Record<string, number> } {
-  return { total: larkCalls.total, byCommand: Object.fromEntries(larkCalls.byCommand) }
+const larkCalls = { total: 0, byCommand: new Map<string, number>(), bySite: new Map<string, number>() }
+/** How many Feishu CLI calls this process made, in total, per subcommand (`im +chat-list`, `api GET`, ...) and per site. */
+export function larkCallStats(): LarkCallStats {
+  return { total: larkCalls.total, byCommand: Object.fromEntries(larkCalls.byCommand), bySite: Object.fromEntries(larkCalls.bySite) }
 }
 /**
- * The Feishu calls made since the last take, in total and per subcommand, forgetting them so the next round counts
- * from zero. A round reports exactly its own calls: a process counter read twice and subtracted would drift across a
- * restart, and taking the larger of two splits is not a sum.
+ * The Feishu calls made since the last take, in total, per subcommand and per site, forgetting them so the next round
+ * counts from zero. A round reports exactly its own calls: a process counter read twice and subtracted would drift
+ * across a restart, and taking the larger of two splits is not a sum.
  */
-export function takeLarkCalls(): { total: number; byCommand: Record<string, number> } {
+export function takeLarkCalls(): LarkCallStats {
   const taken = larkCallStats()
   resetLarkCallStats()
   return taken
 }
 /** Forgets the counters, so a test can measure one round. */
-export function resetLarkCallStats(): void { larkCalls.total = 0; larkCalls.byCommand.clear() }
-function countLarkCall(args: readonly string[]): void {
+export function resetLarkCallStats(): void { larkCalls.total = 0; larkCalls.byCommand.clear(); larkCalls.bySite.clear() }
+/**
+ * The same Feishu reader, with every call filed under `site`. A reader is what `readFeishu` and the sweeps already
+ * pass around, so tagging costs no new plumbing and keeps one `Commands` instance: a caller that stubbed or wrapped it
+ * still sees every call go through.
+ */
+export const atSite = <T extends Pick<Commands, 'lark'>>(reader: T, site: LarkSite): Pick<Commands, 'lark'> =>
+  ({ lark: (args, cwd) => reader.lark(args, cwd, site) })
+function countLarkCall(args: readonly string[], site: LarkSite): void {
   larkCalls.total += 1
   const name = `${args[0] ?? ''} ${args[1] ?? ''}`.trim()
   larkCalls.byCommand.set(name, (larkCalls.byCommand.get(name) ?? 0) + 1)
+  larkCalls.bySite.set(site, (larkCalls.bySite.get(site) ?? 0) + 1)
 }
 /** Parses array elements against a schema, skipping invalid items and incrementing `tally.skipped`. */
 export function validItems<T>(item: z.ZodType<T>, list: readonly unknown[], tally?: Tally): T[] {
@@ -124,12 +138,13 @@ export class Commands {
   }
   /**
    * Runs the Feishu bot's `lark-cli` and returns the JSON `data` payload.
+   * @param site - which part of the agent is calling, so quota can be read per exit and not only per subcommand.
    * @throws CliError with Feishu's error code on failure (rewriting 232011 when the bot is not in the chat).
    */
-  async lark<T>(args: string[], cwd?: string): Promise<T> {
+  async lark<T>(args: string[], cwd?: string, site: LarkSite = 'other'): Promise<T> {
     const bot = this.deployment.feishu
     if (!bot) throw new Error('The Feishu Source has no working bot CLI')
-    countLarkCall(args)
+    countLarkCall(args, site)
     const output = await this.run(bot.cli, [...args, '--as', 'bot', '--format', 'json'], cwd)
       .catch((error: unknown) => { throw membership(error) })
     const result = JSON.parse(output) as { ok: boolean; data: T; error?: { code?: number; message?: string } }

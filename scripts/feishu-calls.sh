@@ -27,7 +27,7 @@ done
 [[ -f $DB ]] || { echo "找不到运行库：$DB" >&2; exit 1; }
 
 python3 - "$DB" "$DAYS" "$JSON" <<'PY'
-import datetime, json, sqlite3, sys
+import datetime, json, sqlite3, sys, unicodedata
 
 db, days, as_json = sys.argv[1], int(sys.argv[2]), sys.argv[3] == '1'
 # 今天还在跑，按它折算会把日用量严重低估，所以预测只用已经过完的日子。
@@ -43,7 +43,7 @@ for key, value in rows:
         day = key.split(':', 1)[1]
         data = json.loads(value)
         records.append({'day': day, 'total': int(data.get('total', 0)), 'rounds': int(data.get('rounds', 0)),
-                        'byCommand': data.get('byCommand') or {}})
+                        'byCommand': data.get('byCommand') or {}, 'bySite': data.get('bySite')})
     except (ValueError, TypeError, json.JSONDecodeError):
         continue
 records = records[-days:]
@@ -82,6 +82,36 @@ if names:
     if grand and split < grand * 0.95:
         print(f"（注意：这些记录的分项合计只有 {split} 次，少于总数 {grand} 次——"
               "2026-11-13 之前的分项按进程计数器取最大值写入，重启后会丢；此后的记录才逐轮累加。）")
+
+# 调用是从哪儿发出的：同一个 `api GET` 可能是兜底扫描、线程轮询，也可能是工单读上下文，只有这一列分得开。
+# 2026-11-13 18:30 之前的记录没有这一项，读成"没测过"，不要当成 0。
+SITES = {'sweep': '兜底扫描（会话/话题历史）', 'thread': '线程轮询', 'read': '工单按需读取',
+        'write': '发送与回执', 'chats': '会话/成员元数据', 'other': '其他/未标注'}
+measured = [record for record in records if record['bySite']]
+if measured:
+    sites = {}
+    for record in measured:
+        for name, count in record['bySite'].items():
+            sites[name] = sites.get(name, 0) + count
+    covered = sum(record['total'] for record in measured)
+
+    # 中文是双宽字符，按字符数补空格会让列歪掉；按显示宽度补，左右对齐都走这一个函数。
+    def width(text):
+        return sum(2 if unicodedata.east_asian_width(char) in 'WF' else 1 for char in text)
+    def cell(text, size, right=False):
+        fill = ' ' * max(0, size - width(text))
+        return fill + text if right else text + fill
+    site_width = max([width(label) for label in SITES.values()] + [8])
+    # 占比以"已经按出口计过的那部分"为分母：上线之前的调用没有出口，算进来会把每一行都压小。
+    counted = sum(sites.values()) or 1
+    print(f"\n{cell('按出口', site_width)}{cell('次数', 8, True)}{cell('占比', 8, True)}")
+    for name in sorted(sites, key=lambda item: -sites[item]):
+        label = cell(SITES.get(name, name), site_width)
+        share = f'{sites[name] / counted * 100:.1f}%'
+        print(f"{label}{cell(str(sites[name]), 8, True)}{cell(share, 8, True)}")
+    missing = covered - sum(sites.values())
+    if missing > 0:
+        print(f"（有 {missing} 次发生在这一项上线之前，未计入分出口。）")
 
 # 每月额度是 100 万次；预测只按已经过完的日子，今天还没跑完。
 done = [record for record in records if record['day'] != today]

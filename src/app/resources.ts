@@ -261,7 +261,7 @@ const ROUTES: readonly Route[] = [
     const ref = feishuRef(source)
     if (!ref) throw new Error('A Feishu source trigger is required')
     const commands = read.host.commands.withSignal(read.signal)
-    return sourcePage(read, 'feishu', () => feishuRead(commands, ref, read.resource, read.host.feishuPageSize()))
+    return sourcePage(read, 'feishu', () => feishuRead(commands, ref, read.resource, read.host.feishuPageSize(), 'read'))
   }],
   ['github/', read => sourcePage(read, 'github', () => readGithub(read.host.commands.withSignal(read.signal), read.resource))],
   ['trigger/', async read => {

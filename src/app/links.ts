@@ -28,7 +28,7 @@ export async function sourceLink(host: LinkHost, trigger: Trigger, signal?: Abor
   let url: string
   try {
     const timeout = AbortSignal.timeout(feishuSettings(host.sources).linkTimeoutMs)
-    url = await readFeishuLink(host.commands.withSignal(AbortSignal.any([signal ?? host.lifetime, timeout])), ref)
+    url = await readFeishuLink(host.commands.withSignal(AbortSignal.any([signal ?? host.lifetime, timeout])), ref, 'read')
   } catch {
     host.lifetime.throwIfAborted()
     signal?.throwIfAborted()

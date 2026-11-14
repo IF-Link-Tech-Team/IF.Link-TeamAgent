@@ -56,7 +56,7 @@ it('reads only the source message link and rejects absent, deleted or cross-chat
   const linked = { message_id: 'om_source', chat_id: 'oc_chat', message_app_link: 'https://applink.feishu.cn/client/message/link/open?token=source' }
   const lark = vi.spyOn(commands, 'lark').mockResolvedValue({ messages: [{ ...linked, message_id: 'om_other', message_app_link: 'https://example.com/other' }, linked] })
   await expect(readFeishuLink(commands, event)).resolves.toBe(linked.message_app_link)
-  expect(lark).toHaveBeenCalledWith(['im', '+messages-mget', '--message-ids', 'om_source', '--no-reactions'])
+  expect(lark).toHaveBeenCalledWith(['im', '+messages-mget', '--message-ids', 'om_source', '--no-reactions'], undefined, 'read')
   for (const row of [{ ...linked, deleted: true }, { ...linked, chat_id: 'oc_elsewhere' }, { ...linked, message_app_link: undefined }, { ...linked, message_id: 'om_other' }]) {
     lark.mockResolvedValueOnce({ messages: [row] })
     await expect(readFeishuLink(commands, event)).rejects.toThrow('unavailable')

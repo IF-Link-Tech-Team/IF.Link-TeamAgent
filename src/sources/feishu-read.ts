@@ -1,7 +1,7 @@
 /** Trigger-scoped Feishu context reader; retrieved messages are returned for model inspection without entering intake. */
 import { z } from 'zod'
 import type { Trigger } from '../core/index.ts'
-import { validItems, type Commands } from '../infra/commands.ts'
+import { validItems, type Commands, type LarkSite } from '../infra/commands.ts'
 
 /** The only capability these readers need: one CLI call. A round's cache stands in for it without a subclass. */
 export type FeishuLark = Pick<Commands, 'lark'>
@@ -30,10 +30,10 @@ const threadSchema = z.object({ messages: z.array(z.unknown()), has_more: z.bool
   thread_id: z.string() })
 
 /** Reads the CLI-provided AppLink for the source message alone, without retaining expanded thread content. */
-export async function readFeishuLink(commands: FeishuLark, ref: FeishuRef): Promise<string> {
+export async function readFeishuLink(commands: FeishuLark, ref: FeishuRef, site: LarkSite = 'read'): Promise<string> {
   const id = messageId.parse(ref.messageId)
   const result = z.object({ messages: z.array(z.object({ message_id: messageId, chat_id: z.string(), message_app_link: z.url().optional(), deleted: z.boolean().optional() })) })
-    .parse(await commands.lark(['im', '+messages-mget', '--message-ids', id, '--no-reactions']))
+    .parse(await commands.lark(['im', '+messages-mget', '--message-ids', id, '--no-reactions'], undefined, site))
   const message = result.messages.find(item => item.message_id === id)
   if (!message || message.deleted || message.chat_id !== ref.chatId || !message.message_app_link) throw new Error('Source message link unavailable')
   return message.message_app_link
@@ -54,11 +54,11 @@ export function feishuResource(resource: string) {
   }
   return { triggerId: match[1]!, section: match[2]!, cursor: match[3] ? decodeURIComponent(match[3]) : undefined }
 }
-async function sourceOf(commands: FeishuLark, ref: FeishuRef) {
+async function sourceOf(commands: FeishuLark, ref: FeishuRef, site: LarkSite) {
   const id = messageId.parse(ref.messageId)
   // Use the raw mget endpoint to read parent/root IDs without triggering CLI thread expansion.
   const params = JSON.stringify({ message_ids: [id] })
-  const listed = await commands.lark(['api', 'GET', '/open-apis/im/v1/messages/mget', '--params', params])
+  const listed = await commands.lark(['api', 'GET', '/open-apis/im/v1/messages/mget', '--params', params], undefined, site)
   const sourceResult = z.object({ items: z.array(sourceSchema) }).parse(listed)
   const source = sourceResult.items.find(message => message.message_id === id)
   if (!source || source.deleted) throw new Error('The source Feishu message is unavailable or deleted; retained trigger text is still readable')
@@ -70,16 +70,16 @@ export interface FeishuPage<M> { status: string; thread_id?: string; messages: M
 export interface FeishuOne<M> { status: string; message: M | null }
 /** Fetches one message or a bounded topic page of a Trigger's source message with explicit pagination continuation. */
 export async function readFeishu(commands: FeishuLark, ref: FeishuRef, resource: string, pageSize: number,
-  order: 'asc' | 'desc' = 'asc'): Promise<FeishuPage<FeishuMessage> | FeishuOne<FeishuMessage>> {
+  order: 'asc' | 'desc' = 'asc', site: LarkSite = 'read'): Promise<FeishuPage<FeishuMessage> | FeishuOne<FeishuMessage>> {
   const request = feishuResource(resource)
   if (request.triggerId !== ref.triggerId) throw new Error('A Feishu source trigger is required')
   if (request.section === 'around') throw new Error('The chat around a message is read with feishuRead')
-  const source = await sourceOf(commands, ref)
+  const source = await sourceOf(commands, ref, site)
   if (request.section === 'thread') {
     if (!source.thread_id) return { status: 'no_thread', messages: [], next_resource: null }
     const args = ['im', '+threads-messages-list', '--thread', source.thread_id, '--order', order, '--page-size', String(pageSize), '--no-reactions']
     if (request.cursor) args.push('--page-token', request.cursor)
-    const result = threadSchema.parse(await commands.lark(args))
+    const result = threadSchema.parse(await commands.lark(args, undefined, site))
     const tally = { skipped: 0 }
     const messages = validItems(messageSchema, result.messages, tally)
     const outside = messages.some(message => message.chat_id !== source.chat_id
@@ -92,7 +92,7 @@ export async function readFeishu(commands: FeishuLark, ref: FeishuRef, resource:
   const target = request.section === 'root' ? source.root_id : request.section === 'parent' ? source.parent_id : source.message_id
   if (!target) return { status: `no_${request.section}`, message: null }
   // The CLI renders rich text and merged forwards; automatic thread replies are omitted in favor of explicit pages.
-  const result = z.object({ messages: z.array(messageSchema) }).parse(await commands.lark(['im', '+messages-mget', '--message-ids', target, '--no-reactions']))
+  const result = z.object({ messages: z.array(messageSchema) }).parse(await commands.lark(['im', '+messages-mget', '--message-ids', target, '--no-reactions'], undefined, site))
   const message = result.messages.find(message => message.message_id === target)
   if (!message) throw new Error('The requested Feishu message is unavailable; do not infer its contents')
   if (message.chat_id !== source.chat_id) throw new Error('Feishu returned a message outside the source chat')
@@ -116,12 +116,12 @@ function historyView(message: HistoricalMessage): ContextMessage {
 }
 /** Reads chat messages surrounding `ref.at` (five before and five after on initial read, then pages of ten older messages). */
 async function chatAround(commands: FeishuLark, ref: FeishuRef, cursor: string | undefined, before = 5,
-  after = 5): Promise<FeishuPage<ContextMessage>> {
+  after = 5, site: LarkSite = 'read'): Promise<FeishuPage<ContextMessage>> {
   const time = Date.parse(ref.at ?? '')
   if (!Number.isFinite(time)) throw new Error('The source Feishu message has no time to read the chat around')
   const list = async (parameters: Record<string, unknown>) => {
     const params = JSON.stringify({ container_id_type: 'chat', container_id: ref.chatId, ...parameters })
-    const page = HistoryPageSchema.parse(await commands.lark(['api', 'GET', '/open-apis/im/v1/messages', '--params', params]))
+    const page = HistoryPageSchema.parse(await commands.lark(['api', 'GET', '/open-apis/im/v1/messages', '--params', params], undefined, site))
     return { ...page, items: validItems(HistoricalMessageSchema, page.items).filter(item => item.chat_id === ref.chatId) }
   }
   // Feishu takes whole seconds; the source message counts among the earlier items, so `before + 1` holds it and those before it.
@@ -137,14 +137,14 @@ async function chatAround(commands: FeishuLark, ref: FeishuRef, cursor: string |
   return { status: 'available', messages, next_resource: next }
 }
 export async function feishuRead(commands: FeishuLark, ref: FeishuRef, resource: string,
-  pageSize: number): Promise<FeishuPage<ContextMessage> | FeishuOne<ContextMessage>> {
+  pageSize: number, site: LarkSite = 'read'): Promise<FeishuPage<ContextMessage> | FeishuOne<ContextMessage>> {
   const request = feishuResource(resource)
   if (request.section === 'around') {
     if (request.triggerId !== ref.triggerId) throw new Error('A Feishu source trigger is required')
-    await sourceOf(commands, ref)
-    return chatAround(commands, ref, request.cursor)
+    await sourceOf(commands, ref, site)
+    return chatAround(commands, ref, request.cursor, 5, 5, site)
   }
-  const result = await readFeishu(commands, ref, resource, pageSize)
+  const result = await readFeishu(commands, ref, resource, pageSize, 'asc', site)
   if ('messages' in result) return { ...result, messages: result.messages.map(feishuView) }
   return { status: result.status, message: result.message ? feishuView(result.message) : null }
 }
@@ -158,10 +158,10 @@ export const feishuThreadContext: ThreadContext<{ readPageSize: number }> = {
   read: async (commands, trigger, part, cursor, config) => {
     const ref = sourceRef(trigger)
     const resource = `feishu/${trigger.id}/${part}${cursor ? '/' + encodeURIComponent(cursor) : ''}`
-    const body = await feishuRead(commands, ref, resource, config.readPageSize)
+    const body = await feishuRead(commands, ref, resource, config.readPageSize, 'read')
     if (part === 'thread' && body.status === 'no_thread') {
       // Fall back to preceding chat messages when the trigger message does not belong to a topic thread.
-      const around = await chatAround(commands, ref, undefined, 5, 0)
+      const around = await chatAround(commands, ref, undefined, 5, 0, 'read')
       return { messages: around.messages, body: { status: 'chat_neighbours', messages: around.messages }, status: 'chat_neighbours' }
     }
     const messages = 'messages' in body ? body.messages : body.message ? [body.message] : []

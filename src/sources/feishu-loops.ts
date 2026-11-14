@@ -6,7 +6,7 @@ import { z } from 'zod'
 import { liveTicket, threadKey, type Thread, type Trigger } from '../core/index.ts'
 import { feishuChatLink } from './feishu-channel.ts'
 import type { FeishuBot } from '../deployment.ts'
-import { takeLarkCalls, validItems, type Commands, type Tally } from '../infra/commands.ts'
+import { atSite, takeLarkCalls, validItems, type Commands, type LarkSite, type Tally } from '../infra/commands.ts'
 import { readFeishu, type FeishuRef } from './feishu-read.ts'
 import { feishuRef, feishuTime, feishuTrigger, HistoricalMessageSchema, historyEvent, HistoryPageSchema, SOURCE, topicEvent }
   from './feishu-trigger.ts'
@@ -47,6 +47,11 @@ export const FEISHU_TIMING = {
   topicRecent: envMinutes('DSH_FEISHU_TOPIC_RECENT_MINUTES', 720),
   /** Every topic is swept this often, hot or not. */
   topicSweep: envMinutes('DSH_FEISHU_TOPIC_SWEEP_MINUTES', 120),
+  /**
+   * How long the process must have been down before a catch-up forces every topic, rather than reading only the ones
+   * that saw a message recently. A short restart cannot lose enough thread replies to justify the full pass.
+   */
+  catchUpForce: envMinutes('DSH_FEISHU_CATCH_UP_FORCE_MINUTES', 30),
   /** A subscribed thread is polled at most this often. */
   threadPoll: envMinutes('DSH_FEISHU_THREAD_POLL_MINUTES', 10),
   /** A thread whose last activity is older than this is left to the ticket-driven poll. */
@@ -82,17 +87,18 @@ export function noteFeishuEvent(trigger: Trigger, at = Date.now()): void {
 
 /** One round's memo of Feishu reads, so the chat, topic, and thread sweeps never read the same page twice in a round. */
 export interface FeishuCache {
-  lark<T>(commands: Pick<Commands, 'lark'>, args: string[], cwd?: string): Promise<T>
+  /** `site` only labels the call that actually goes out; a hit was already paid for and is not counted again. */
+  lark<T>(commands: Pick<Commands, 'lark'>, args: string[], cwd?: string, site?: LarkSite): Promise<T>
   readonly size: number
 }
 export function feishuCache(): FeishuCache {
   const memo = new Map<string, Promise<unknown>>()
   return {
-    lark<T>(commands: Pick<Commands, 'lark'>, args: string[], cwd?: string): Promise<T> {
+    lark<T>(commands: Pick<Commands, 'lark'>, args: string[], cwd?: string, site: LarkSite = 'other'): Promise<T> {
       const key = [cwd ?? '', ...args].join('\u0000')
       let pending = memo.get(key) as Promise<T> | undefined
       if (pending) return pending
-      pending = commands.lark<T>(args, cwd)
+      pending = commands.lark<T>(args, cwd, site)
       memo.set(key, pending)
       // A failed read must not be memoized, or one flaky call would answer for the rest of the round.
       void pending.catch(() => memo.delete(key))
@@ -213,7 +219,7 @@ async function consume(ctx: SourceContext, signal: AbortSignal): Promise<void> {
 export async function refreshChatNames(ctx: SourceContext, signal?: AbortSignal): Promise<Record<string, string>> {
   const commands = ctx.commands.withSignal(signal)
   const result = z.looseObject({ chats: z.array(z.looseObject({ chat_id: z.string(), name: z.string().nullish() })).optional() })
-    .parse(await commands.lark(['im', '+chat-list', '--page-all', '--page-size', '100']))
+    .parse(await commands.lark(['im', '+chat-list', '--page-all', '--page-size', '100'], undefined, 'chats'))
   const names = Object.fromEntries((result.chats ?? []).filter(chat => chat.name).map(chat => [chat.chat_id, chat.name!]))
   ctx.state.set(KV.sources.labels(SOURCE), names)
   return names
@@ -277,6 +283,11 @@ async function backfillLoop(ctx: SourceContext, signal: AbortSignal): Promise<vo
     const now = Date.now()
     const catchUp = catchUpRequested
     catchUpRequested = false
+    // 会话历史只带得出话题的根消息，线程里的回复只有读话题才看得到，所以一次真正的补扫要把每个已知话题都翻一遍。
+    // 但重启只停了几十秒时，这一页页翻下去几乎换不回任何消息：按停机时长决定要不要强制，短了就回到常规的活跃过滤。
+    const gap = catchUp ? catchUpGap(ctx, now) : 0
+    const force = catchUp && gap >= FEISHU_TIMING.catchUpForce
+    if (catchUp) console.log(`[feishu] catch-up after ${Number.isFinite(gap) ? `${Math.round(gap / 1000)}s` : 'an unrecorded gap'}: ${force ? 'every topic' : 'recent topics only'}`)
     const chats = sweepableChats(ctx, config)
     const chatSweep = catchUp || now - lastChatSweep >= FEISHU_TIMING.chatSweep
     const topicSweep = catchUp || now - lastTopicSweep >= FEISHU_TIMING.topicSweep
@@ -288,7 +299,7 @@ async function backfillLoop(ctx: SourceContext, signal: AbortSignal): Promise<vo
     const targets = chatSweep ? Object.entries(chats) : fastChats(chats, now, swept)
     for (const [chatId, direct] of targets) {
       if (signal.aborted) break
-      await sweepChat(ctx, chatId, direct, signal, tally, failures, errors, mode, cache, catchUp)
+      await sweepChat(ctx, chatId, direct, signal, tally, failures, errors, mode, cache, force)
       swept.set(chatId, now)
     }
     if (chatSweep) { lastChatSweep = now; swept = new Map() }
@@ -298,7 +309,7 @@ async function backfillLoop(ctx: SourceContext, signal: AbortSignal): Promise<vo
       const window = { since: new Date(now - FEISHU_TIMING.topicSweep).toISOString(), until: new Date(now).toISOString() }
       for (const [chatId, direct] of Object.entries(chats)) {
         if (signal.aborted) break
-        try { await sweepChatTopics(ctx, chatId, direct, window.since, window.until, signal, tally, 'all', cache, catchUp) }
+        try { await sweepChatTopics(ctx, chatId, direct, window.since, window.until, signal, tally, 'all', cache, force) }
         catch (error) { if (!signal.aborted) errors.push(`${chatId} topics: ${String(error)}`) }
       }
     }
@@ -307,14 +318,24 @@ async function backfillLoop(ctx: SourceContext, signal: AbortSignal): Promise<vo
     const skipped = tally.skipped ? `; ${tally.skipped} unreadable messages skipped` : ''
     const retrying = errors.length ? `; ${errors.length} chat(s) failed this round, retrying` : ''
     // The round takes what it spent: a process counter kept apart from the day's record drifted on every restart.
-    const { total: calls, byCommand } = takeLarkCalls()
+    const { total: calls, byCommand, bySite } = takeLarkCalls()
     // Every round is accounted, not only a sweep round: the daily record is what quota decisions are read from later.
-    const { today } = signal.aborted ? { today: 0 } : noteFeishuCalls(ctx, calls, byCommand)
+    const { today } = signal.aborted ? { today: 0 } : noteFeishuCalls(ctx, calls, byCommand, bySite)
     const read = calls ? `; ${calls} API calls this round, ${today} today` : `; ${today} API calls today`
     if (!signal.aborted) ctx.report('history', historyFailureHealth(failures, errors) ?? {
       state: 'ready', detail: `Configured groups and known direct chats recovered${skipped}${retrying}${read}`, at: new Date().toISOString() })
     await delay(ROUND_MS, undefined, { signal }).catch(() => {})
   }
+}
+
+/**
+ * How long the process was down (or, mid-run, how long since the last completed round), read from the persisted
+ * timestamp the previous round left. An unreadable or missing value reads as "a long time", so a first start after an
+ * upgrade still sweeps everything once.
+ */
+export function catchUpGap(ctx: SourceContext, now = Date.now()): number {
+  const last = Date.parse(ctx.state.get(KV.feishu.lastRound) ?? '')
+  return Number.isFinite(last) ? Math.max(0, now - last) : Number.POSITIVE_INFINITY
 }
 
 /** The local calendar day (`YYYY-MM-DD`) a call is counted under, so an operator reads it in their own time zone. */
@@ -326,16 +347,25 @@ export function callDay(at: Date): string {
  * Adds one round's Feishu calls to today's record and logs the rounds that actually called. The in-memory counter dies
  * with the process, so the daily record is the only way to read quota use back afterwards; an idle round writes nothing
  * but its increment, which keeps both the store and the log sparse.
+ *
+ * `bySite` answers a question `byCommand` cannot: the same `api GET` is a cold sweep, a thread poll, or an agent reading
+ * context, and only the site tells them apart. Records written before 2026-11-13 18:30 have no `bySite` key; that is
+ * read as "not measured", not as zero.
  */
-export function noteFeishuCalls(ctx: SourceContext, calls: number, byCommand: Record<string, number> = {}, at = new Date()): { today: number } {
+export function noteFeishuCalls(ctx: SourceContext, calls: number, byCommand: Record<string, number> = {},
+  bySite: Record<string, number> = {}, at = new Date()): { today: number } {
   const key = KV.feishu.calls(callDay(at))
-  const current = ctx.state.get(key) ?? { total: 0, rounds: 0, byCommand: {} }
+  const current = ctx.state.get(key) ?? { total: 0, rounds: 0, byCommand: {}, bySite: {} }
   const split = { ...current.byCommand }
   // Each round adds its own split, so the parts keep summing to the day's total instead of freezing on the largest
   // value one process happened to reach.
   for (const [name, count] of Object.entries(byCommand)) split[name] = (split[name] ?? 0) + count
-  const next = { total: current.total + calls, rounds: current.rounds + 1, byCommand: split }
+  const sites = { ...(current.bySite ?? {}) }
+  for (const [site, count] of Object.entries(bySite)) sites[site] = (sites[site] ?? 0) + count
+  const next = { total: current.total + calls, rounds: current.rounds + 1, byCommand: split, bySite: sites }
   ctx.state.set(key, next)
+  // 补扫要不要强制读全部话题，看的就是"上一轮跑到什么时候"。
+  ctx.state.set(KV.feishu.lastRound, new Date(at).toISOString())
   console.log(`[feishu] round ${next.rounds}: ${calls} API call(s), ${next.total} today (${callDay(at)})`)
   return { today: next.total }
 }
@@ -427,7 +457,7 @@ export function admitsBackfill(ctx: SourceContext, trigger: Trigger): boolean {
 async function scanContainer(ctx: SourceContext, chatId: string, direct: boolean, kind: 'chat' | 'thread', id: string,
   since: string, until: string, signal: AbortSignal, tally: Tally, topics: Record<string, string>, cache?: FeishuCache): Promise<void> {
   const commands = ctx.commands.withSignal(signal)
-  const lark = <T>(args: string[]): Promise<T> => cache ? cache.lark<T>(commands, args) : commands.lark<T>(args)
+  const lark = <T>(args: string[]): Promise<T> => cache ? cache.lark<T>(commands, args, undefined, 'sweep') : commands.lark<T>(args, undefined, 'sweep')
   let page: string | undefined
   const pages = new Set<string>()
   do {
@@ -491,7 +521,7 @@ async function pollThread(ctx: SourceContext, thread: Thread, signal?: AbortSign
   activity.thread.set(thread.key, Date.now())
   const commands = ctx.commands.withSignal(signal)
   // A thread's first page usually repeats a page the topic sweep of the same round already read; share that read.
-  const reader: Pick<Commands, 'lark'> = cache ? { lark: (args, cwd) => cache.lark(commands, args, cwd) } : commands
+  const reader: Pick<Commands, 'lark'> = cache ? { lark: (args, cwd) => cache.lark(commands, args, cwd, 'thread') } : atSite(commands, 'thread')
   const pageSize = config.readPageSize
   const checkpoint = KV.feishu.seen(thread.key)
   const known = new Set(ctx.state.get(checkpoint) ?? [])

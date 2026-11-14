@@ -163,7 +163,7 @@ async function send(host: Pick<SourceContext, 'commands'>, message: OutboundMess
   const chatId = message.channel.address.chatId
   if (!chatId) throw new Error('Missing scheduler chat')
   await host.commands.lark(['im', '+messages-send', '--chat-id', chatId, '--markdown', checkedImText(message.text),
-    '--idempotency-key', message.id])
+    '--idempotency-key', message.id], undefined, 'write')
   return 'sent'
 }
 

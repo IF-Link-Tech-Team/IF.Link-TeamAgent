@@ -106,7 +106,7 @@ export const feishuKind: SourceKind<FeishuConfig> = {
         const commands = sourceContext(host, feishuKind).commands.withSignal(signal)
         const chat = String(part.syncChat)
         const members = ['im', '+chat-members-list', '--chat-id', chat, '--member-types', 'user', '--page-all', '--page-limit', '0']
-        const result = MembersSchema.parse(await commands.lark(members))
+        const result = MembersSchema.parse(await commands.lark(members, undefined, 'chats'))
         if (result.has_more || result.truncations?.length) throw new Error('Feishu returned an incomplete member list')
         // Preserve existing member order so policy version hashes stay stable; update names in place and append new members.
         const users = new Map(result.users.map(user => [user.member_id, user.name]))

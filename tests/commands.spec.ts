@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
-import { CliError, Commands, commandError, larkCallStats, resetLarkCallStats, takeLarkCalls } from '../src/infra/commands.ts'
+import { atSite, CliError, Commands, commandError, larkCallStats, resetLarkCallStats, takeLarkCalls } from '../src/infra/commands.ts'
 import { feishuKind } from '../src/sources/feishu.ts'
 import { feishuChannel } from '../src/sources/feishu-trigger.ts'
 import { githubKind } from '../src/sources/github.ts'
@@ -36,7 +36,20 @@ describe('account-isolated operations', () => {
     await commands.lark(['im', '+chat-list'])
     await commands.lark(['im', '+chat-list'])
     await commands.lark(['api', 'GET', '/open-apis/im/v1/messages'])
-    expect(larkCallStats()).toEqual({ total: 3, byCommand: { 'im +chat-list': 2, 'api GET': 1 } })
+    expect(larkCallStats()).toEqual({ total: 3, byCommand: { 'im +chat-list': 2, 'api GET': 1 }, bySite: { other: 3 } })
+  })
+  it('counts calls by the part of the agent that made them, so a sweep and a send are not one number', async () => {
+    resetLarkCallStats()
+    const commands = new Commands(() => deployment, {}, new AbortController().signal)
+    vi.spyOn(commands, 'run').mockResolvedValue('{"ok":true,"data":{}}')
+    await commands.lark(['api', 'GET', '/open-apis/im/v1/messages'], undefined, 'sweep')
+    // A reader tagged once files every call it makes, which is how the sweep and thread loops report.
+    await atSite(commands, 'thread').lark(['api', 'GET', '/open-apis/im/v1/messages'])
+    await commands.lark(['api', 'GET', '/open-apis/im/v1/messages'], undefined, 'read')
+    await commands.lark(['im', '+messages-reply'], undefined, 'write')
+    // The site is per call, so the same command lands in two exits and the two splits still agree.
+    expect(larkCallStats()).toEqual({ total: 4, byCommand: { 'api GET': 3, 'im +messages-reply': 1 },
+      bySite: { sweep: 1, thread: 1, read: 1, write: 1 } })
   })
   it('takes a round\'s calls and starts the next round from zero, so a restart cannot corrupt the split', async () => {
     resetLarkCallStats()
@@ -44,10 +57,10 @@ describe('account-isolated operations', () => {
     vi.spyOn(commands, 'run').mockResolvedValue('{"ok":true,"data":{}}')
     await commands.lark(['im', '+chat-list'])
     await commands.lark(['api', 'GET', '/open-apis/im/v1/messages'])
-    expect(takeLarkCalls()).toEqual({ total: 2, byCommand: { 'im +chat-list': 1, 'api GET': 1 } })
-    expect(larkCallStats()).toEqual({ total: 0, byCommand: {} })
+    expect(takeLarkCalls()).toEqual({ total: 2, byCommand: { 'im +chat-list': 1, 'api GET': 1 }, bySite: { other: 2 } })
+    expect(larkCallStats()).toEqual({ total: 0, byCommand: {}, bySite: {} })
     await commands.lark(['im', '+chat-list'])
-    expect(takeLarkCalls()).toEqual({ total: 1, byCommand: { 'im +chat-list': 1 } })
+    expect(takeLarkCalls()).toEqual({ total: 1, byCommand: { 'im +chat-list': 1 }, bySite: { other: 1 } })
   })
   it('refuses Feishu commands when the deployment has no Feishu bot', async () => {
     await expect(new Commands(() => testDeployment({ feishu: undefined }), {}, new AbortController().signal).lark(['im', '+chat-list'])).rejects.toThrow('The Feishu Source has no working bot CLI')

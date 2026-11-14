@@ -56,8 +56,13 @@ export const KV = {
   gestures: { pace: family<{ at: string; count: number }, [chat: string]>('gesture-pace:'),
     person: family<string, [person: string]>('gesture-person:') },
   feishu: { chats: record<Record<string, boolean>>('feishu-chats'), history: family<string, [chat: string]>('feishu-history:'),
-    /** Feishu CLI calls per local day (`YYYY-MM-DD`), by subcommand, so quota use can be read back after a restart. */
-    calls: family<{ total: number; rounds: number; byCommand: Record<string, number> }, [day: string]>('feishu-calls:'),
+    /**
+     * Feishu CLI calls per local day (`YYYY-MM-DD`), by subcommand and by site (which part of the agent called), so
+     * quota use can be read back after a restart AND attributed. `bySite` is absent on records written before it existed.
+     */
+    calls: family<{ total: number; rounds: number; byCommand: Record<string, number>; bySite?: Record<string, number> }, [day: string]>('feishu-calls:'),
     topics: family<Record<string, string>, [chat: string]>('feishu-history-threads:'),
+    /** When the last round finished, so a restart can tell a 30-second blip from an overnight outage. */
+    lastRound: record<string>('feishu-last-round'),
     seen: family<string[], [thread: string]>('thread-seen:'), initialized: family<boolean, [thread: string]>('thread-initialized:') },
 }

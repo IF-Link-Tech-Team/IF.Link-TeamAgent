@@ -52,7 +52,13 @@
 
 可调参数（环境变量，分钟）：`DSH_FEISHU_CHAT_SWEEP_MINUTES`(60)、`DSH_FEISHU_TOPIC_HOT_MINUTES`(30)、
 `DSH_FEISHU_TOPIC_RECENT_MINUTES`(720)、`DSH_FEISHU_TOPIC_SWEEP_MINUTES`(120)、`DSH_FEISHU_THREAD_POLL_MINUTES`(10)、
-`DSH_FEISHU_THREAD_RECENT_MINUTES`(60)、`DSH_FEISHU_CHAT_NAMES_MINUTES`(60)。
+`DSH_FEISHU_THREAD_RECENT_MINUTES`(60)、`DSH_FEISHU_CHAT_NAMES_MINUTES`(60)、`DSH_FEISHU_CATCH_UP_FORCE_MINUTES`(30)。
+
+**补扫什么时候强制读全部话题**（2026-11-14 起）：会话历史只带得出话题的根消息——拿一个有 11 条回复的话题实测，
+同一时间窗的会话历史只回了 2 条，线程回复要读话题容器才看得到。所以重连后的那一轮必须把每个已知话题翻一遍，
+否则停机期间落在冷话题里的回复会永远漏掉。但"每个话题 1 次"是 131 次，重启只停几十秒时换不回任何消息：
+现在按开机时读到的上一轮时间（`feishu-last-round`）算停机时长，短于阈值就退回常规的活跃过滤（实测 160 → 30 次），
+超过阈值仍然全扫。第一次升级到这个版本时没有时间戳，按"停了很久"处理，保守全扫一次。
 
 **线上的值（2026-11-13 起，写在 systemd unit 的 `Environment=` 里）**：`CHAT_SWEEP=1440`、`TOPIC_SWEEP=1440`、
 `THREAD_POLL=30`——也就是把三道兜底全放到最慢。前提是长连接覆盖 99.1%，兜底只防"看着连着但事件没到"的静默丢失；

@@ -6,8 +6,8 @@ import { KV } from '../src/kv.ts'
 import { sendFeishu } from '../src/sources/feishu-channel.ts'
 import { feishuChannel } from '../src/sources/feishu-trigger.ts'
 import { apply as applyFeishu, pollThreads as pollFeishuThreads } from '../src/sources/feishu.ts'
-import { admitsBackfill, FEISHU_TIMING, feishuCache, historyFailureHealth, noteFeishuCalls, noteFeishuEvent, requestFeishuCatchUp,
-  resetFeishuLoops, runFeishu, sweepChatTopics, threadDue }
+import { admitsBackfill, catchUpGap, FEISHU_TIMING, feishuCache, historyFailureHealth, noteFeishuCalls, noteFeishuEvent,
+  requestFeishuCatchUp, resetFeishuLoops, runFeishu, sweepChatTopics, threadDue }
   from '../src/sources/feishu-loops.ts'
 import { commentTrigger, githubAddress, githubChannel, issueTrigger, type GithubComment, type GithubIssue } from '../src/sources/github-trigger.ts'
 import { claimPull, observePull, pullEndNotices, pullOf, ticketBranch, type Pull } from '../src/sources/github-pull.ts'
@@ -183,13 +183,13 @@ describe('feishu source', () => {
     resetLarkCallStats()
     const h = host()
     const at = new Date('2026-11-13T10:00:00+08:00')
-    expect(noteFeishuCalls(h, 3, {}, at).today).toBe(3)
-    expect(noteFeishuCalls(h, 4, {}, at).today).toBe(7)
+    expect(noteFeishuCalls(h, 3, {}, {}, at).today).toBe(3)
+    expect(noteFeishuCalls(h, 4, {}, {}, at).today).toBe(7)
     const record = h.store.get<{ total: number; rounds: number }>('feishu-calls:2026-11-13')!
     expect(record.total).toBe(7)
     expect(record.rounds).toBe(2)
     // A new local day starts a new record rather than adding to yesterday's.
-    expect(noteFeishuCalls(h, 1, {}, new Date('2026-11-14T00:30:00+08:00')).today).toBe(1)
+    expect(noteFeishuCalls(h, 1, {}, {}, new Date('2026-11-14T00:30:00+08:00')).today).toBe(1)
     expect(h.store.get<{ total: number }>('feishu-calls:2026-11-14')!.total).toBe(1)
     h.store.close()
   })
@@ -197,8 +197,8 @@ describe('feishu source', () => {
     resetLarkCallStats()
     const h = host()
     const at = new Date('2026-11-13T10:00:00+08:00')
-    noteFeishuCalls(h, 2, { 'api GET': 2 }, at)
-    noteFeishuCalls(h, 3, { 'api GET': 1, 'im +chat-list': 2 }, at)
+    noteFeishuCalls(h, 2, { 'api GET': 2 }, {}, at)
+    noteFeishuCalls(h, 3, { 'api GET': 1, 'im +chat-list': 2 }, {}, at)
     const record = h.store.get<{ total: number; byCommand: Record<string, number> }>('feishu-calls:2026-11-13')!
     expect(record.total).toBe(5)
     expect(record.byCommand).toEqual({ 'api GET': 3, 'im +chat-list': 2 })
@@ -206,11 +206,43 @@ describe('feishu source', () => {
     expect(Object.values(record.byCommand).reduce((sum, count) => sum + count, 0)).toBe(record.total)
     h.store.close()
   })
+  it('keeps a per-site split beside the per-command one, so a sweep and an agent read are told apart', () => {
+    const h = host()
+    const at = new Date('2026-11-13T10:00:00+08:00')
+    noteFeishuCalls(h, 145, { 'api GET': 140, 'im +threads-messages-list': 5 }, { sweep: 138, thread: 7 }, at)
+    noteFeishuCalls(h, 13, { 'api GET': 13 }, { read: 13 }, at)
+    const record = h.store.get<{ total: number; byCommand: Record<string, number>; bySite: Record<string, number> }>('feishu-calls:2026-11-13')!
+    expect(record.total).toBe(158)
+    expect(record.bySite).toEqual({ sweep: 138, thread: 7, read: 13 })
+    // Both splits have to agree with the total: one is filed by what was called, the other by why.
+    expect(Object.values(record.bySite).reduce((sum, count) => sum + count, 0)).toBe(record.total)
+    expect(Object.values(record.byCommand).reduce((sum, count) => sum + count, 0)).toBe(record.total)
+    // A record written before the site split existed reads as "not measured", not as zero.
+    h.store.set('feishu-calls:2026-11-12', { total: 30, rounds: 2, byCommand: { 'api GET': 30 } } as never)
+    noteFeishuCalls(h, 4, { 'api GET': 4 }, { sweep: 4 }, new Date('2026-11-12T23:00:00+08:00'))
+    const old = h.store.get<{ bySite?: Record<string, number> }>('feishu-calls:2026-11-12')!
+    expect(old.bySite).toEqual({ sweep: 4 })
+    h.store.close()
+  })
   it('reads every sweep cadence as minutes, so an unset environment cannot turn a round into a tight loop', () => {
     const minute = 60_000
     expect(FEISHU_TIMING).toEqual({ chatSweep: 60 * minute, topicHot: 30 * minute, topicRecent: 720 * minute, topicSweep: 120 * minute,
-      threadPoll: 10 * minute, threadRecent: 60 * minute, chatNames: 60 * minute })
+      catchUpForce: 30 * minute, threadPoll: 10 * minute, threadRecent: 60 * minute, chatNames: 60 * minute })
     for (const value of Object.values(FEISHU_TIMING)) expect(value).toBeGreaterThanOrEqual(minute)
+  })
+  it('measures how long the last round has been gone, so a quick restart can skip the full topic pass', () => {
+    const h = host()
+    const now = Date.parse('2026-11-14T09:31:00+08:00')
+    // Nothing recorded (first start, or an upgrade from a version that never wrote it) reads as a long outage: sweep once.
+    expect(catchUpGap(h, now)).toBe(Number.POSITIVE_INFINITY)
+    noteFeishuCalls(h, 0, {}, {}, new Date(now - 26_000))
+    expect(catchUpGap(h, now)).toBe(26_000)
+    // A 26-second restart costs less than forcing every topic, because the thread replies it could have missed are old news.
+    expect(catchUpGap(h, now)).toBeLessThan(FEISHU_TIMING.catchUpForce)
+    // An overnight outage is a different matter: the next catch-up has to read every known topic once.
+    expect(Date.parse('2026-11-14T09:31:00+08:00') - Date.parse('2026-11-13T20:00:00+08:00'))
+      .toBeGreaterThan(FEISHU_TIMING.catchUpForce)
+    h.store.close()
   })
   it('sweeps only the topics that received an event when the round asks for hot ones', async () => {
     resetFeishuLoops()

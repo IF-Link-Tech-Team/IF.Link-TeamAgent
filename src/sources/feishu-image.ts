@@ -36,7 +36,7 @@ export async function readAdmissionImage(agent: Agent, commands: Commands, ref: 
   try {
     const result = z.object({ saved_path: z.string() }).parse(await commands.withSignal(signal).lark([
       'im', '+messages-resources-download', '--message-id', messageId, '--file-key', imageKey, '--type', 'image', '--output', './image',
-    ], directory))
+    ], directory, 'read'))
     const path = await realpath(result.saved_path)
     if (dirname(path) !== await realpath(directory)) throw new Error('Image download returned a path outside its temporary directory')
     const mediaTypes: Record<string, ImageMediaType> = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.gif': 'image/gif' }

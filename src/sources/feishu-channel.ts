@@ -31,7 +31,7 @@ export async function sendFeishu(host: Pick<SourceContext, 'commands'>, message:
   // space later: Feishu renders the leading space away, and the alternative is a message that never leaves the outbox.
   const markdown = text.startsWith('@') ? ` ${text}` : text
   const reply = ['im', '+messages-reply', '--message-id', messageId, '--markdown', markdown, '--reply-in-thread', '--idempotency-key', message.id]
-  try { await host.commands.lark(reply) }
+  try { await host.commands.lark(reply, undefined, 'write') }
   catch (error) {
     if (gone(error)) return 'gone'
     throw error
@@ -48,7 +48,7 @@ const ReactionPage = z.object({
 /** Adds one emoji to a message as the bot; Feishu keeps one record per operator and emoji, so a repeated call changes nothing. */
 async function addMark(host: Pick<SourceContext, 'commands'>, messageId: string, emoji: string): Promise<void> {
   await host.commands.lark(['im', 'reactions', 'create', '--params', JSON.stringify({ message_id: messageId }),
-    '--data', JSON.stringify({ reaction_type: { emoji_type: emoji } })])
+    '--data', JSON.stringify({ reaction_type: { emoji_type: emoji } })], undefined, 'write')
 }
 /**
  * Deletes the bot's own marks of these emoji from a message, so a message wears one mark at a time. A person's reaction with
@@ -59,10 +59,10 @@ async function clearMarks(host: Pick<SourceContext, 'commands'>, messageId: stri
     let token: string | undefined
     for (let page = 0; page < 5; page++) {
       const params = { message_id: messageId, reaction_type: emoji, page_size: 50, ...token ? { page_token: token } : {} }
-      const result = ReactionPage.parse(await host.commands.lark(['im', 'reactions', 'list', '--params', JSON.stringify(params)]))
+      const result = ReactionPage.parse(await host.commands.lark(['im', 'reactions', 'list', '--params', JSON.stringify(params)], undefined, 'write'))
       const mine = result.items.filter(item => item.reaction_type.emoji_type === emoji && item.operator.operator_type === 'app')
       for (const item of mine) {
-        await host.commands.lark(['im', 'reactions', 'delete', '--params', JSON.stringify({ message_id: messageId, reaction_id: item.reaction_id })])
+        await host.commands.lark(['im', 'reactions', 'delete', '--params', JSON.stringify({ message_id: messageId, reaction_id: item.reaction_id })], undefined, 'write')
       }
       if (mine.length || !result.has_more || !result.page_token) break
       token = result.page_token

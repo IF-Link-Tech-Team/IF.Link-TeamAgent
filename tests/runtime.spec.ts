@@ -1246,7 +1246,7 @@ it('rereads a Source\'s display names on request, reports the new ones and keeps
   runtime.store.set('source-labels:feishu', { oc_team: 'Team' })
   const lark = vi.spyOn(Commands.prototype, 'lark').mockResolvedValue({ chats: [{ chat_id: 'oc_team', name: 'Team' }, { chat_id: 'oc_new', name: 'New chat' }] })
   expect(await runtime.settings.refreshLabels('feishu')).toEqual({ added: ['New chat'] })
-  expect(lark).toHaveBeenCalledWith(['im', '+chat-list', '--page-all', '--page-size', '100'])
+  expect(lark).toHaveBeenCalledWith(['im', '+chat-list', '--page-all', '--page-size', '100'], undefined, 'chats')
   expect(runtime.store.get('source-labels:feishu')).toEqual({ oc_team: 'Team', oc_new: 'New chat' })
   lark.mockRejectedValue(new Error('token expired'))
   await expect(runtime.settings.refreshLabels('feishu')).rejects.toThrow('token expired')
