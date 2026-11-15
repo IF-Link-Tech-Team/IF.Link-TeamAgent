@@ -119,8 +119,14 @@ export function historyFailureHealth(failures: ReadonlyMap<string, number>, erro
     : undefined
 }
 
-export const runFeishu = (ctx: SourceContext, signal: AbortSignal): Promise<unknown> =>
-  Promise.allSettled([watch, backfillLoop, chatNamesLoop].map(loop => loop(ctx, signal)))
+export const runFeishu = (ctx: SourceContext, signal: AbortSignal): Promise<unknown> => {
+  // Log the cadences this process actually resolved: an environment variable that never reached the service (started
+  // outside the unit, or a tmux server whose environment is older) is otherwise only visible as a puzzling round size.
+  const minutes = (value: number): string => `${Math.round(value / 60_000)}m`
+  console.log(`[feishu] cadence: chat ${minutes(FEISHU_TIMING.chatSweep)}, topic ${minutes(FEISHU_TIMING.topicSweep)}, `
+    + `thread ${minutes(FEISHU_TIMING.threadPoll)}, hot ${minutes(FEISHU_TIMING.topicHot)}, catch-up force ${minutes(FEISHU_TIMING.catchUpForce)}`)
+  return Promise.allSettled([watch, backfillLoop, chatNamesLoop].map(loop => loop(ctx, signal)))
+}
 const enabled = (ctx: SourceContext): FeishuConfig | undefined => ctx.config<FeishuConfig>(SOURCE)
 const bot = (ctx: SourceContext): FeishuBot => {
   const resolved = ctx.deployment.feishu
