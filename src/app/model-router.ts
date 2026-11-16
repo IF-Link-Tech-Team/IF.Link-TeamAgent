@@ -35,9 +35,9 @@ const FAILOVER_CODES = new Set([
   // A rejected key or an exhausted subscription on one route is a reason to try another provider, not to end the turn.
   'AUTH', 'INVALID_CREDENTIAL', 'MISSING_CREDENTIAL', 'NO_ADAPTER', 'UNKNOWN_MODEL',
 ])
-/** How long a failed route is skipped before it may be tried again. */
+/** The saved Routing settings carry the cooldown and probe cadence; tolerating a missing object keeps older callers working. */
 const DEFAULT_COOLDOWN_MS = 5 * 60_000
-/** How often the main Session's primary route is probed while it is cooling down. */
+/** How often the main Session's primary route is probed while it is cooling down, when no setting is stored. */
 const DEFAULT_PROBE_MS = 60_000
 /** Whether `error` carries one of the provider-side codes this router fails over on. */
 export const isFailoverError = (error: unknown): boolean =>
@@ -76,18 +76,27 @@ export interface ModelRouterOptions { cooldownMs?: number; probeMs?: number }
  * models again first.
  */
 export class ModelRouter {
-  private readonly cooldownMs: number
-  private readonly probeMs: number
+  private readonly options: ModelRouterOptions
   private readonly cooling = new Map<string, { until: number; code: string; role: RouteRole }>()
   private readonly hops = new Map<string, { turn: number; step: number; count: number }>()
   private readonly switches = new Map<string, number>()
-  private timer?: ReturnType<typeof setInterval>
+  private timer?: ReturnType<typeof setTimeout>
   private probing = false
   private disposed = false
+  private stopped = false
 
   constructor(private readonly host: ModelRouterHost, options: ModelRouterOptions = {}) {
-    this.cooldownMs = options.cooldownMs ?? DEFAULT_COOLDOWN_MS
-    this.probeMs = options.probeMs ?? DEFAULT_PROBE_MS
+    this.options = options
+  }
+
+  /** How long a failed route is skipped: the saved Routing setting, or a test's fixed value. */
+  private cooldownMs(): number {
+    return this.options.cooldownMs ?? (this.settings().routing?.cooldownSeconds ?? DEFAULT_COOLDOWN_MS / 1000) * 1000
+  }
+
+  /** How often the main Session's route is probed: the saved Routing setting, or a test's fixed value. */
+  private probeMs(): number {
+    return this.options.probeMs ?? (this.settings().routing?.probeSeconds ?? DEFAULT_PROBE_MS / 1000) * 1000
   }
 
   /** Subscribe the routing listeners and start probing the main Session's primary route. */
@@ -209,7 +218,7 @@ export class ModelRouter {
   }
 
   private open(route: { provider: string; model: string }, role: RouteRole, code: string): void {
-    this.cooling.set(routeKey(route), { until: Date.now() + this.cooldownMs, code, role })
+    this.cooling.set(routeKey(route), { until: Date.now() + this.cooldownMs(), code, role })
   }
 
   /** How many routes this step already switched through, resetting when the Session moves to another step. */
@@ -255,13 +264,24 @@ export class ModelRouter {
 
   private startProbe(): void {
     if (this.timer) return
-    this.timer = setInterval(() => { void this.tick() }, this.probeMs)
+    this.stopped = false
+    this.scheduleProbe()
+  }
+
+  /** Schedule one probe with the cadence saved at this moment, so a changed Routing setting applies on the next tick. */
+  private scheduleProbe(): void {
+    if (this.timer || this.stopped || this.disposed) return
+    this.timer = setTimeout(() => {
+      this.timer = undefined
+      void this.tick().finally(() => { this.scheduleProbe() })
+    }, this.probeMs())
     this.timer.unref?.()
   }
 
   private stopProbe(): void {
+    this.stopped = true
     if (!this.timer) return
-    clearInterval(this.timer)
+    clearTimeout(this.timer)
     this.timer = undefined
   }
 

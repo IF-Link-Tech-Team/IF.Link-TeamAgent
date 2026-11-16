@@ -1,7 +1,7 @@
 /** Settings view combining versioned configuration blocks, per-source forms and policy metadata, and execution environment details. */
 import { SETUP_FIELDS } from '../../deployment.ts'
 import { KV } from '../../kv.ts'
-import { policyVersion } from '../../policy.ts'
+import { policyVersion, SETTINGS_MASK } from '../../policy.ts'
 import type { SourceRegistry } from '../../sources/registry.ts'
 import { declaredVariables, executionRoot } from '../execution-environment.ts'
 import type { Store } from '../store.ts'
@@ -24,11 +24,13 @@ function policyOf(sources: SourceRegistry, id: string, health: HealthMap) {
 export function settingsView(store: Store, sources: SourceRegistry, health: HealthMap, setup: SetupState, stateDir: string,
   routes: RouteState[] = []) {
   const settings = store.settings()
-  const block = <V>(name: 'policy' | 'eval' | 'executor', value: V) => ({ value, revision: store.blockRevision(name) })
+  const block = <V>(name: 'policy' | 'eval' | 'executor' | 'routing' | 'marks' | 'runtimes' | 'dispatch', value: V) => ({ value, revision: store.blockRevision(name) })
   return {
     policyVersion: policyVersion(settings),
     blocks: { policy: block('policy', settings.policy), eval: block('eval', settings.eval), executor: block('executor',
-      settings.executor) },
+      settings.executor), routing: block('routing', settings.routing),
+      runtimes: block('runtimes', settings.runtimes), dispatch: block('dispatch', settings.dispatch),
+      marks: block('marks', { ...settings.marks, token: settings.marks.token ? SETTINGS_MASK : '' }) },
     /** Live cooldown state of every route in both chains, beside the chain editors that own them. */
     routes,
     sources: sources.instances(settings).map(instance => {
@@ -38,7 +40,8 @@ export function settingsView(store: Store, sources: SourceRegistry, health: Heal
       return { id, kind: instance.kind, title, description: kind?.description ?? { zh: '', en: '' }, installed: instance.installed,
         value: { enabled: instance.enabled, config: instance.config }, revision: store.blockRevision(`source:${instance.id}`),
         restarts: SETUP_FIELDS[instance.id] ?? [], fields: kind?.fields ?? [], facts: kind?.facts?.(setup.deployment) ?? {},
-        labels: store.get(KV.sources.labels(instance.id)) ?? {}, ...problem ? { problem } : {}, ...policyOf(sources, instance.id, health) }
+        labels: store.get(KV.sources.labels(kind?.labelsFrom ?? instance.id)) ?? {}, ...problem ? { problem } : {},
+        ...policyOf(sources, instance.id, health) }
     }),
     environment: { root: executionRoot(settings, stateDir), variables: declaredVariables(sources, settings) },
   }

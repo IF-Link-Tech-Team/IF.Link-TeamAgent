@@ -68,6 +68,23 @@ Both presets run with `danger-full-access` as the operator's OS user and read me
 
    Both configurations share the keychain entry for the app secret. To remove only the bot configuration, delete its directory; do not run `lark-cli config remove`, which would affect the shared secret.
 
+### External worker runtimes (optional)
+
+A Ticket may run on an external ACP runtime instead of DSH. Install the CLI and sign in once as the operator account:
+
+```sh
+curl -fsSL https://code.kimi.com/kimi-code/install.sh | bash   # kimi, then `kimi login`
+curl -fsSL https://antigravity.google/cli/install.sh | bash    # agy, then `agy acp --login`
+curl -fsSL https://claude.ai/install.sh | bash                 # claude, then sign in once
+npm install -g --prefix ~/.local @agentclientprotocol/claude-agent-acp   # the ACP entry point for Claude
+```
+
+Claude Code reads `CLAUDE.md` as its prompt file and accepts the `haiku`/`sonnet`/`opus` model aliases; its ACP adapter uses an existing `claude` login, or `ANTHROPIC_API_KEY` in the runtime's env file. The other two read `AGENTS.md`.
+
+Then open **Execution → Worker runtimes**, enable the runtime, keep or correct its command and prompt file (`AGENTS.md`), and set an env file (0600, `KEY=VALUE`) for any API key. Open **Execution → Task routing**, enable routing, fill each family's S/M/L model ids, and order the families for each task type. `dispatch.enabled` off keeps every Ticket on DSH. A family with an empty model slot, a disabled runtime or an unauthenticated CLI is skipped; when nothing is available the Ticket records a degraded DSH fallback.
+
+An external worker gets the same `gh`/`lark-cli` shims through `PATH` and the ticket's execution variables. It runs as the operator's OS user, so isolate it with a dedicated account or container if the host also serves other work.
+
 ## Install
 
 Run this block once, on a machine that has no `superagent` profile yet:

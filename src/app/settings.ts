@@ -2,7 +2,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { z } from 'zod'
 import { UserError, type EngineForSettings } from '../core/index.ts'
-import { EvalConfigSchema, ExecutorConfigSchema, PolicyConfigSchema, SettingsSchema, policyEffects, policyVersion } from '../policy.ts'
+import { DispatchConfigSchema, EvalConfigSchema, ExecutorConfigSchema, MarksConfigSchema, PolicyConfigSchema, RoutingConfigSchema, RuntimeProfileSchema, SETTINGS_MASK, SettingsSchema, policyEffects, policyVersion } from '../policy.ts'
 import type { Settings as SettingsValue, SettingsBlock, SettingsOrigin, SettingsSave } from '../policy.ts'
 import type { SourceHost } from '../sources/host.ts'
 import type { HealthBoard, HealthEntry } from '../infra/health.ts'
@@ -29,7 +29,7 @@ interface Block {
   merge(settings: SettingsValue, value: unknown, id: string): SettingsValue
   guard?(current: SettingsValue, candidate: SettingsValue, origin: SettingsOrigin): void
 }
-const BLOCKS: Record<'policy' | 'eval' | 'executor' | 'source', Block> = {
+const BLOCKS: Record<'policy' | 'eval' | 'executor' | 'routing' | 'marks' | 'runtimes' | 'dispatch' | 'source', Block> = {
   policy: {
     parse: (value, sources) => {
       const policy = PolicyConfigSchema.parse(value)
@@ -43,6 +43,26 @@ const BLOCKS: Record<'policy' | 'eval' | 'executor' | 'source', Block> = {
     merge: (settings, value) => ({ ...settings, executor: value as SettingsValue['executor'] }),
     // Only the management panel may modify shell execution paths or commands.
     guard: (current, candidate, origin) => { if (origin !== 'panel' && environment(current) !== environment(candidate)) throw new UserError('panelOnlyEnvironment') },
+  },
+  routing: {
+    parse: value => RoutingConfigSchema.parse(value),
+    merge: (settings, value) => ({ ...settings, routing: value as SettingsValue['routing'] }),
+  },
+  marks: {
+    parse: value => MarksConfigSchema.parse(value),
+    merge: (settings, value) => ({ ...settings, marks: value as SettingsValue['marks'] }),
+  },
+  runtimes: {
+    parse: value => z.record(z.string(), RuntimeProfileSchema).parse(value),
+    merge: (settings, value) => ({ ...settings, runtimes: value as SettingsValue['runtimes'] }),
+    // Launch commands and environments are host mechanics; a prompt-injected tool call must not point a worker at another binary.
+    guard: (_current, _candidate, origin) => { if (origin !== 'panel') throw new UserError('panelOnlyEnvironment') },
+  },
+  dispatch: {
+    parse: value => DispatchConfigSchema.parse(value),
+    merge: (settings, value) => ({ ...settings, dispatch: value as SettingsValue['dispatch'] }),
+    // Which CLI a ticket runs on is host mechanics; a prompt-injected tool call must not redirect work to another binary.
+    guard: (_current, _candidate, origin) => { if (origin !== 'panel') throw new UserError('panelOnlyEnvironment') },
   },
   source: {
     parse: (value, sources, id) => sources.validate(id, z.object({ enabled: z.boolean(), config: z.unknown() }).parse(value)),
@@ -73,6 +93,14 @@ export interface SettingsHost {
   requestPass(): void
 }
 
+/** What every read returns for the marks token: set or empty, never the secret itself. */
+const maskedMarks = (marks: SettingsValue['marks']): SettingsValue['marks'] => ({ ...marks, token: marks.token ? SETTINGS_MASK : '' })
+/** Put the stored token back when a save carries the mask, so an unrelated field edit cannot erase the secret. */
+function unmaskedMarks(value: unknown, current: SettingsValue['marks']): unknown {
+  if (!value || typeof value !== 'object') return value
+  const { token, ...rest } = value as Record<string, unknown>
+  return token === SETTINGS_MASK ? { ...rest, token: current.token } : value
+}
 /**
  * Validates and persists block-scoped settings in `Store`, enforces origin guards, and manages source policy synchronization and label refreshes.
  * `Runtime`, management HTTP routes, and main-Session tools read and save settings through it.
@@ -117,6 +145,10 @@ export class Settings {
       pause: { revision: revision('pause'), value: { paused: settings.paused } },
       eval: { revision: revision('eval'), value: settings.eval },
       executor: { revision: revision('executor'), value: settings.executor },
+      routing: { revision: revision('routing'), value: settings.routing },
+      runtimes: { revision: revision('runtimes'), value: settings.runtimes },
+      dispatch: { revision: revision('dispatch'), value: settings.dispatch },
+      marks: { revision: revision('marks'), value: maskedMarks(settings.marks) },
       policy: { revision: revision('policy'), rules: rules.map(rule => ({ id: rule.id, name: rule.name, enabled: rule.enabled })),
         allowed: Object.fromEntries(Object.entries(parts).map(([id, part]) => [id, part.allowed.length])), read: 'settings/policy' },
       sources: sources.instances(settings).map(({ id, kind, enabled, installed }) =>
@@ -131,8 +163,9 @@ export class Settings {
     const { store, sources } = this.host
     const settings = store.settings(), id = block.startsWith('source:') ? block.slice('source:'.length) : undefined
     const instance = id === undefined ? undefined : sources.instances(settings).find(item => item.id === id)
-    const value = block === 'pause' ? { paused: settings.paused } : block === 'policy' || block === 'eval' || block === 'executor' ? settings[block]
-      : instance ? { enabled: instance.enabled, config: instance.config } : undefined
+    const value = block === 'pause' ? { paused: settings.paused } : block === 'marks' ? maskedMarks(settings.marks)
+      : block === 'policy' || block === 'eval' || block === 'executor' || block === 'routing' || block === 'runtimes' || block === 'dispatch' ? settings[block]
+        : instance ? { enabled: instance.enabled, config: instance.config } : undefined
     if (value === undefined) throw new UserError('unknownBlock', { block })
     return { block, revision: store.blockRevision(block as SettingsSave), value }
   }
@@ -154,7 +187,8 @@ export class Settings {
     if (!(kind in BLOCKS)) throw new UserError('unknownBlock', { block })
     const rules = BLOCKS[kind as keyof typeof BLOCKS]
     if (kind === 'source' && !sources.kind(id)) throw new UserError('sourceNotInstalled', { source: id })
-    const parsed = rules.parse(value, sources, id)
+    // A read masks the marks token; saving the mask keeps the stored value instead of replacing it with bullets.
+    const parsed = rules.parse(block === 'marks' ? unmaskedMarks(value, store.settings().marks) : value, sources, id)
     const current = store.settings()
     const candidate = rules.merge(current, parsed, id)
     const model = block === 'eval' ? candidate.eval.model : block === 'executor' ? candidate.executor.model : null

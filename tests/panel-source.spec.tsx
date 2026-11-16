@@ -11,7 +11,7 @@ it('shows each Source\'s state on the Source status and opens its settings from 
   await mount()
   await click(zh['tab.source'])
   expect(document.querySelector('.dt-status-title')?.textContent).toBe(zh.statusTitle)
-  expect(all('.dt-form > .dt-list > .dt-row .dt-row-name').map(title => title.textContent)).toEqual(['飞书', 'GitHub'])
+  expect(all('.dt-form > .dt-list > .dt-row .dt-row-name').map(title => title.textContent)).toEqual(['飞书', 'GitHub', '定时与心跳'])
   expect(all('.dt-form > .dt-list > .dt-row')[0]!.querySelector('.dt-row-meta')?.textContent).toBe('24 小时到达 12被过滤 2最近 ' + document.querySelector('.dt-row-meta time, .dt-row-meta .dt-lv:last-child .dt-lv-value')?.textContent)
   expect(text()).toContain(zh['sourceState.error'])
   expect(text()).toContain('socket closed')
@@ -64,7 +64,7 @@ it('renders each Source\'s settings from its kind\'s fields and saves one Source
   await click(zh['tab.source'])
   await click(find(zh['tab.settings'], '.dt-status-head button'))
   const cards = all('.dt-card')
-  expect(cards.map(card => card.querySelector('.dt-row-title')?.firstChild?.textContent)).toEqual(['飞书', 'GitHub'])
+  expect(cards.map(card => card.querySelector('.dt-row-title')?.firstChild?.textContent)).toEqual(['飞书', 'GitHub', '定时与心跳'])
   const feishu = cards[0]!
   expect(feishu.textContent).toContain('接收的群')
   await click([...feishu.querySelectorAll('button')].find(button => button.textContent === '添加')!)
@@ -187,8 +187,8 @@ it('shows the Sources waiting for the deployment check, and the problem on the S
   await mount()
   await click(zh['tab.source'])
   const rows = all('.dt-form > .dt-list > .dt-row')
-  // The GitHub Source is where the problem is fixed, so it shows the error; Feishu waits.
-  expect(rows.map(row => row.querySelector('.dt-status-text')?.textContent)).toEqual(['等待部署检查', '出错'])
+  // The GitHub Source is where the problem is fixed, so it shows the error; the other Sources wait.
+  expect(rows.map(row => row.querySelector('.dt-status-text')?.textContent)).toEqual(['等待部署检查', '出错', '等待部署检查'])
   expect(text()).not.toContain('Waiting for setup')
   expect(rows[1]!.textContent).toContain('部署检查未通过：GitHub 来源没有设置监听的仓库。')
   await click(find(zh.sourceOpenSettings, '.dt-row button'))
@@ -283,4 +283,41 @@ it('reads the settings again as soon as dsh-superagent answers after a save rest
   expect(server.requests.filter(request => request.path === 'settings').length).toBeGreaterThan(reads)
   expect(field('智能体的 GitHub CLI').matches(':disabled')).toBe(false)
   expect(field<HTMLInputElement>('智能体的 GitHub CLI').value).toBe('/opt/bin/gh-agent')
+})
+
+it('edits scheduled jobs and the heartbeat on the Source card, with their nested fields', async () => {
+  await mount()
+  await click(zh['tab.source'])
+  await click(find(zh['tab.settings'], '.dt-status-head button'))
+  const card = all('.dt-card').find(item => item.querySelector('.dt-card-title')?.textContent === '定时与心跳')!
+  expect(field<HTMLInputElement>('时区').value).toBe('Asia/Shanghai')
+  await click([...card.querySelectorAll('button')].find(button => button.textContent === '添加')!)
+  const row = card.querySelectorAll('.dt-rows-item')[0]!
+  await type(row.querySelector<HTMLInputElement>('input[aria-label="id"]')!, 'daily-digest')
+  await type(row.querySelector<HTMLInputElement>('input[aria-label="名字"]')!, '每日盘点')
+  await type(row.querySelector<HTMLInputElement>('input[aria-label="时间"]')!, '09:30')
+  await type(row.querySelector<HTMLTextAreaElement>('textarea[aria-label="要做的事"]')!, '盘点在办与待人工的工单')
+  // The job's chat is chosen from the chats the Feishu Source already labelled.
+  await type(row.querySelector<HTMLSelectElement>('select[aria-label="选择投递群"]')!, 'oc_team')
+  await click('主动心跳')
+  await type(field<HTMLSelectElement>('心跳投递到'), 'oc_team')
+  await act(async () => { card.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })) }); await settle()
+  expect(server.settings.sources.scheduler!.config).toMatchObject({
+    timeZone: 'Asia/Shanghai',
+    jobs: [{ id: 'daily-digest', title: '每日盘点', schedule: { kind: 'daily', at: '09:30' }, text: '盘点在办与待人工的工单',
+      chatId: 'oc_team', enabled: true }],
+    heartbeat: { enabled: true, chatId: 'oc_team' },
+  })
+})
+
+it('edits the Feishu sweep cadences behind Advanced instead of an environment variable', async () => {
+  await mount()
+  await click(zh['tab.source'])
+  await click(find(zh['tab.settings'], '.dt-status-head button'))
+  const feishu = all('.dt-card')[0]!
+  await click([...feishu.querySelectorAll<HTMLElement>('[data-disclosure-row]')].find(row => row.textContent?.includes('高级'))!)
+  await type(field<HTMLInputElement>('订阅线程轮询间隔 / 分钟'), '120')
+  await act(async () => { feishu.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })) }); await settle()
+  expect(server.settings.sources.feishu!.config).toMatchObject({ threadPollMinutes: 120 })
+  expect(server.settings.sources.feishu!.config).toHaveProperty('chatSweepMinutes')
 })

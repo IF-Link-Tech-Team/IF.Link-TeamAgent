@@ -13,11 +13,12 @@ import type { DroppedReply, HistoryView, Problem, PromptsView, SetupView, Source
   TicketRow, TicketStage,
   TriggerRow } from '../../src/client/api.ts'
 import { SETUP_FIELDS } from '../../src/deployment.ts'
-import { EvalConfigSchema, ExecutorConfigSchema, PolicyConfigSchema, SettingsSchema } from '../../src/policy.ts'
+import { DispatchConfigSchema, EvalConfigSchema, ExecutorConfigSchema, MarksConfigSchema, PolicyConfigSchema, RoutingConfigSchema, RuntimeProfileSchema, SETTINGS_MASK, SettingsSchema } from '../../src/policy.ts'
 import { SetupError, type SetupCode } from '../../src/setup.ts'
 import { feishuChannel } from '../../src/sources/feishu-trigger.ts'
 import { githubChannel } from '../../src/sources/github-trigger.ts'
 import { feishuKind } from '../../src/sources/feishu.ts'
+import { schedulerKind } from '../../src/sources/scheduler.ts'
 import { githubKind } from '../../src/sources/github.ts'
 import type { Health } from '../../src/sources/host.ts'
 import type { SourceKind } from '../../src/sources/kind.ts'
@@ -79,7 +80,7 @@ export const droppedReply = (id: string, hoursAgo: number, source: 'feishu' | 'g
 const dayAgo = () => new Date(Date.now() - 86_400_000).toISOString()
 export const problemOf = (code: SetupCode, values: Record<string, string> = {}) => new SetupError(code, values).problem
 // The kinds' configurations differ, and the fake reads them only as the records the views carry.
-const KINDS = [feishuKind, githubKind] as unknown as SourceKind[]
+const KINDS = [feishuKind, githubKind, schedulerKind] as unknown as SourceKind[]
 export const MACHINE = { stateDir: '/srv/dsh-superagent', promptMaxChars: 100000, admissionContextMaxPages: 10,
   admissionContextTimeoutMs: 15000 }
 
@@ -140,7 +141,7 @@ function sourceSettings(): SourceView[] {
       value: { enabled: server.settings.sources[kind.kind]?.enabled ?? true, config },
         revision: server.revisions[`source:${kind.kind}`] ?? 0,
       restarts: SETUP_FIELDS[kind.kind] ?? [], fields: kind.fields, facts: kind.facts?.(resolved()) ?? {},
-      labels: kind.kind === 'feishu' ? { oc_team: '团队群', oc_other: '另一个群', ...server.joined } : {}, ...problem ? { problem } : {},
+      labels: (kind.labelsFrom ?? kind.kind) === 'feishu' ? { oc_team: '团队群', oc_other: '另一个群', ...server.joined } : {}, ...problem ? { problem } : {},
       ...policy ? { policy } : {} }
   })
 }
@@ -171,7 +172,12 @@ const settingsView = (): ApiResponse<'GET settings'> => ({
   routes: server.routes ?? [],
   blocks: { policy: { value: server.settings.policy, revision: server.revisions.policy ?? 0 },
     eval: { value: server.settings.eval, revision: server.revisions.eval ?? 0 },
-    executor: { value: server.settings.executor, revision: server.revisions.executor ?? 0 } },
+    executor: { value: server.settings.executor, revision: server.revisions.executor ?? 0 },
+    routing: { value: server.settings.routing, revision: server.revisions.routing ?? 0 },
+    runtimes: { value: server.settings.runtimes, revision: server.revisions.runtimes ?? 0 },
+    dispatch: { value: server.settings.dispatch, revision: server.revisions.dispatch ?? 0 },
+    marks: { value: { ...server.settings.marks, token: server.settings.marks.token ? SETTINGS_MASK : '' },
+      revision: server.revisions.marks ?? 0 } },
   sources: sourceSettings(),
   environment: { root: '/srv/dsh-superagent/work', variables: [
     { owner: 'executor', enabled: true, variables: [{ key: 'DSH_SUPERAGENT_DIR', description: { zh: '工单的执行目录',
@@ -349,13 +355,22 @@ const ROUTES: { [K in keyof Api]: Route<K> } = {
   } },
   'PUT settings/:block': { body: true, answer: ({ params: { block }, body }) => {
     const source = block.startsWith('source:') ? KINDS.find(kind => `source:${kind.kind}` === block) : undefined
-    if (!['policy', 'eval', 'executor'].includes(block) && !source) return block.startsWith('source:') ? refuse(404, 'Source not found')
+    if (!['policy', 'eval', 'executor', 'routing', 'marks', 'runtimes', 'dispatch'].includes(block) && !source) return block.startsWith('source:') ? refuse(404, 'Source not found')
       : refuse(400, 'Invalid settings: block')
     if (body.revision !== (server.revisions[block] ?? 0)) return refuse(409, 'Settings changed. Reload before saving.')
     let restarting = false
     if (block === 'policy') server.settings = { ...server.settings, policy: PolicyConfigSchema.parse(body.value) }
     else if (block === 'executor') server.settings = { ...server.settings, executor: ExecutorConfigSchema.parse(body.value) }
     else if (block === 'eval') server.settings = { ...server.settings, eval: EvalConfigSchema.parse(body.value) }
+    else if (block === 'routing') server.settings = { ...server.settings, routing: RoutingConfigSchema.parse(body.value) }
+    else if (block === 'runtimes') server.settings = { ...server.settings, runtimes: z.record(z.string(), RuntimeProfileSchema).parse(body.value) }
+    else if (block === 'dispatch') server.settings = { ...server.settings, dispatch: DispatchConfigSchema.parse(body.value) }
+    else if (block === 'marks') {
+      const value = body.value as Record<string, unknown>
+      // As the host does: sending the mask back keeps the stored secret.
+      const token = value.token === SETTINGS_MASK ? server.settings.marks.token : value.token
+      server.settings = { ...server.settings, marks: MarksConfigSchema.parse({ ...value, token }) }
+    }
     else if (source) {
       const { enabled, config: value } = SourceSave.parse(body.value)
       const config = source.schema.parse(value)

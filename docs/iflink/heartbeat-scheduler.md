@@ -454,7 +454,10 @@ now - lastEventAt < 10min                  → 醒（搭车：既有变化，又
 两处与计划不同，都是简化：
 
 1. **取消了 job 级 `mode: observe`。** 原来的设想是给 job 加一个观察开关；实现时发现不需要——`periodic-check` 规则不写，就没有任何规则能被命中，`admitsInferred` 自然拒绝。**用 Policy 版本化而不是新增开关**，少一个概念、多一道可审计的边界。
-2. **面板暂时不能编辑 job**：`schedule` 是嵌套对象，面板的 `rows` 编辑器表达不了，所以 `fields: []`，任务用 `orchestrator_settings_save` 配。P1 再补表单。
+2. ~~面板暂时不能编辑 job~~（2026-11-15 已补）：`schedule` 是嵌套对象，原来的 `rows` 编辑器表达不了，所以 `fields: []`、任务只能用 `orchestrator_settings_save` 配。现在面板的 `rows` 支持 `schedule` / `time` / `switch` / `textarea` 列，以及 `heartbeat.enabled` 这样的嵌套 key：
+   - **定时与心跳**卡片直接增删任务：重复方式（每天 / 每周 / 每隔 N 小时）、时间、要做的事、投递群（从飞书已加入的群选）、启用开关；
+   - 心跳的开关、投递群、夜间静默起止、最短间隔、最长沉默都在同一张卡片上，后四项收在「高级」里；
+   - 时区也在卡片上。保存后下一分钟 tick 就按新配置跑，不用重启。
 
 启用顺序（第一次别跳步）：
 

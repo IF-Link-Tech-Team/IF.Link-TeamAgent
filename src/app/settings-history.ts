@@ -9,18 +9,22 @@ type SourceSettings = SettingsVersion['settings']['sources'][string]
 export type SettingsChangeCode = 'ruleAdded' | 'ruleRenamed' | 'ruleInstruction' | 'ruleEnabled' | 'ruleDisabled' | 'ruleRemoved'
   | 'sourceEnabled' | 'sourceDisabled' | 'sourceField' | 'sourceRowsAdded' | 'sourceRowsRemoved' | 'sourceRowsChanged' | 'sourceAdmission'
   | 'mode' | 'timeout' | 'evalModel' | 'executorModel' | 'evalFallbacks' | 'executorFallbacks' | 'maxWorkers' | 'paused' | 'resumed'
-  | 'executionDirectory' | 'prepareCommand' | 'blockedCommands'
+  | 'executionDirectory' | 'prepareCommand' | 'blockedCommands' | 'gestureMode' | 'gestureBudget' | 'routeCooldown' | 'routeProbe' | 'marksEnabled' | 'marksCredentials' | 'marksModel'
+  | 'runtimeChanged' | 'dispatchChanged'
 /** A single settings diff entry rendered by the panel using `change.<code>` and field labels from the Source listing. */
 export interface SettingsChange {
   code: SettingsChangeCode; items?: string[]; from?: string | number | boolean; to?: string | number | boolean; name?: string; source?: string
   field?: string; part?: true
 }
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
+/** Read a dotted field path (`heartbeat.enabled`) from a stored Source configuration. */
+const readPath = (value: Record<string, unknown>, path: string): unknown =>
+  path.split('.').reduce<unknown>((at, key) => at && typeof at === 'object' ? (at as Record<string, unknown>)[key] : undefined, value)
 function fieldChanges(id: string, fields: readonly FieldSpec[], a: Record<string, unknown>, b: Record<string, unknown>, part?: true): SettingsChange[] {
   const changes: SettingsChange[] = []
   const at = { source: id, ...part ? { part } : {} }
   for (const field of fields) {
-    const from = a[field.key], to = b[field.key]
+    const from = readPath(a, field.key), to = readPath(b, field.key)
     if (same(from, to)) continue
     if (field.type === 'rows') {
       const rowKey = field.columns[0]!.key
@@ -63,6 +67,13 @@ function settingsChanges(before: SettingsVersion['settings'], after: SettingsVer
     if (JSON.stringify(before.policy.sources[id]?.admission ?? {}) !== JSON.stringify(after.policy.sources[id]?.admission ?? {})) changes.push({ code: 'sourceAdmission', source: id, part: true })
   }
   if (before.eval.mode !== after.eval.mode) changes.push({ code: 'mode', from: before.eval.mode, to: after.eval.mode })
+  if (before.policy.gestures.mode !== after.policy.gestures.mode) changes.push({ code: 'gestureMode', from: before.policy.gestures.mode,
+    to: after.policy.gestures.mode })
+  if (before.policy.gestures.personMinutes !== after.policy.gestures.personMinutes
+    || before.policy.gestures.perHour !== after.policy.gestures.perHour) {
+    changes.push({ code: 'gestureBudget', from: `${before.policy.gestures.personMinutes}m/${before.policy.gestures.perHour}`,
+      to: `${after.policy.gestures.personMinutes}m/${after.policy.gestures.perHour}` })
+  }
   if (before.eval.timeoutSeconds !== after.eval.timeoutSeconds) changes.push({ code: 'timeout', from: before.eval.timeoutSeconds, to: after.eval.timeoutSeconds })
   if (!same(before.eval.model, after.eval.model)) changes.push({ code: 'evalModel' })
   if (!same(before.executor.model, after.executor.model)) changes.push({ code: 'executorModel' })
@@ -74,6 +85,18 @@ function settingsChanges(before: SettingsVersion['settings'], after: SettingsVer
   if (before.executor.directory !== after.executor.directory) changes.push({ code: 'executionDirectory', from: before.executor.directory, to: after.executor.directory })
   if (before.executor.prepare !== after.executor.prepare) changes.push({ code: 'prepareCommand' })
   if (!same(before.executor.blockedCommands, after.executor.blockedCommands)) changes.push({ code: 'blockedCommands', from: before.executor.blockedCommands.join(' '), to: after.executor.blockedCommands.join(' ') })
+  if (before.routing.cooldownSeconds !== after.routing.cooldownSeconds) changes.push({ code: 'routeCooldown',
+    from: before.routing.cooldownSeconds, to: after.routing.cooldownSeconds })
+  if (before.routing.probeSeconds !== after.routing.probeSeconds) changes.push({ code: 'routeProbe',
+    from: before.routing.probeSeconds, to: after.routing.probeSeconds })
+  if (before.marks.enabled !== after.marks.enabled) changes.push({ code: 'marksEnabled', from: before.marks.enabled ? 'on' : 'off',
+    to: after.marks.enabled ? 'on' : 'off' })
+  // Never record the token itself, only that it changed.
+  if (before.marks.account !== after.marks.account || before.marks.token !== after.marks.token) changes.push({ code: 'marksCredentials' })
+  if (before.marks.model !== after.marks.model || before.marks.timeoutMs !== after.marks.timeoutMs) changes.push({ code: 'marksModel',
+    from: before.marks.model, to: after.marks.model })
+  if (!same(before.runtimes, after.runtimes)) changes.push({ code: 'runtimeChanged' })
+  if (!same(before.dispatch, after.dispatch)) changes.push({ code: 'dispatchChanged' })
   for (const id of new Set([...Object.keys(before.sources), ...Object.keys(after.sources)])) changes.push(...sourceChanges(id, before.sources[id], after.sources[id], sources))
   return changes
 }

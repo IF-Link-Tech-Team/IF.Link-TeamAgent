@@ -222,3 +222,14 @@ it('sends one stop for a double click on Confirm', async () => {
   await act(async () => { confirm.click(); confirm.click() })
   expect(server.requests.filter(request => request.path === 'tickets/t1/stop')).toHaveLength(1)
 })
+
+it('sets the model route cooldown and probe cadence beside the fallback chains', async () => {
+  await mount()
+  await click(zh['tab.execution'])
+  await click(find(zh['tab.settings'], '.dt-status-head button'))
+  expect(text()).toContain(zh.routeFallbackNote)
+  await type(field<HTMLInputElement>(zh.routeCooldown), '120')
+  await type(field<HTMLInputElement>(zh.routeProbe), '30')
+  await click(zh.save)
+  expect(server.settings.routing).toEqual({ cooldownSeconds: 120, probeSeconds: 30 })
+})

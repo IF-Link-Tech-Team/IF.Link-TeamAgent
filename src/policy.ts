@@ -32,6 +32,8 @@ export interface Assessment {
   /** Present when the message asks for no work but does ask for a gesture, which the mode decides to draw or only record. */
   gesture?: { score: number; intent: Gesture['intent'] } | null | undefined
   title: string; scope: string; reason: string; intent_evidence?: string | null; acknowledgement?: string | null; worktree_name?: string
+  /** Optional routing hints an assessment may give for an accepted proactive Ticket. */
+  type?: string | null; difficulty?: 'S' | 'M' | 'L' | null; needs?: string[] | null
 }
 /**
  * Validate an assessment against enabled rules and convert it into an engine `AssessmentOutcome`.
@@ -69,7 +71,9 @@ export function assessmentOutcome(assessment: Assessment, settings: Pick<Setting
     return { kind: 'ignore', audit: { ...audit, would_accept: true, proposal }, reason: { code: 'observed', values: { text: assessment.reason } } }
   }
   return { kind: 'accept', title, scope, reason: assessment.reason, ...(assessment.acknowledgement ? { acknowledgement: assessment.acknowledgement } : {}),
-    rules: matches.map(match => match.rule_id), audit, ...(name ? { name } : {}) }
+    rules: matches.map(match => match.rule_id), audit, ...(name ? { name } : {}),
+    ...(assessment.type ? { type: assessment.type } : {}), ...(assessment.difficulty ? { difficulty: assessment.difficulty } : {}),
+    ...(assessment.needs?.length ? { needs: assessment.needs } : {}) }
 }
 const DEFAULT_RULES: Rule[] = [
   { id: 'copy', kind: 'work' as const, name: 'Copy fixes', enabled: true, instruction: 'Explicit requests to correct a typo, wording, punctuation or existing translation. Preserve product promises and business meaning.' },
@@ -101,7 +105,12 @@ export type SourcePolicy = z.infer<typeof SourcePolicySchema>
 export const PolicyConfigSchema = z.object({
   rules: z.array(RuleSchema).refine(rules => new Set(rules.map(rule => rule.id)).size === rules.length, 'Duplicate rule IDs').default(DEFAULT_RULES),
   /** Whether a message that needs no work may still get a social reaction, and when that is only recorded. */
-  gestures: z.object({ mode: z.enum(['off', 'observe', 'auto']).default('observe') }).strict().default({ mode: 'observe' }),
+  gestures: z.object({
+    mode: z.enum(['off', 'observe', 'auto']).default('observe'),
+    /** How long before the same person may be reacted to again, and how many reactions one chat gets in a rolling hour. */
+    personMinutes: z.number().int().min(1).max(1440).default(30),
+    perHour: z.number().int().min(1).max(60).default(2),
+  }).strict().default({ mode: 'observe', personMinutes: 30, perHour: 2 }),
   sources: z.record(z.string().regex(/^[a-z][a-z0-9-]*$/), SourcePolicySchema).default({}),
 }).strict()
 export const EvalConfigSchema = z.object({
@@ -130,15 +139,146 @@ export const ExecutorConfigSchema = z.object({
   blockedCommands: z.array(CommandNameSchema).default([]),
 }).strict()
 export const SourceInstanceSchema = z.object({ enabled: z.boolean().default(true), config: z.record(z.string(), z.unknown()).default({}) }).strict()
+/** How the model router paces itself: how long a failed route is skipped, and how often the main Session's route is probed. */
+export const RoutingConfigSchema = z.object({
+  cooldownSeconds: z.number().int().min(10).max(3600).default(300),
+  probeSeconds: z.number().int().min(10).max(600).default(60),
+}).strict()
+/**
+ * One worker runtime's launch profile. Every value is editable from the panel; the host reads it when it launches a
+ * worker, so a new CLI or a changed path applies to the next Assignment without a restart. `command` may start with `~`.
+ */
+export const RuntimeProfileSchema = z.object({
+  enabled: z.boolean().default(false),
+  /** `dsh` runs in process; `acp` starts the command as an Agent Client Protocol stdio server. */
+  protocol: z.enum(['dsh', 'acp']).default('acp'),
+  command: z.string().trim().default(''),
+  args: z.array(z.string()).default([]),
+  /** Non-secret environment values; secrets belong in `envFile` (0600, KEY=VALUE lines). */
+  env: z.record(z.string(), z.string()).default({}),
+  envFile: z.string().trim().default(''),
+  /** Files under the ticket directory that receive the worker prompt, such as AGENTS.md or CLAUDE.md. */
+  promptFiles: z.array(z.string()).default([]),
+  /** `config` uses ACP session config options, `arg` appends `modelArg` with `{model}`, `none` uses the CLI default. */
+  modelMode: z.enum(['config', 'arg', 'none']).default('config'),
+  modelArg: z.string().trim().default(''),
+  concurrency: z.number().int().min(1).max(LIMITS.maxWorkers.max).default(1),
+  maxWallMinutes: z.number().int().min(1).max(1440).default(60),
+  maxTurns: z.number().int().min(1).max(1000).default(200),
+}).strict()
+export type RuntimeProfile = z.infer<typeof RuntimeProfileSchema>
+const defaultRuntimes = (): Record<string, RuntimeProfile> => ({
+  dsh: RuntimeProfileSchema.parse({ enabled: true, protocol: 'dsh' }),
+  'kimi-code': RuntimeProfileSchema.parse({ command: '~/.kimi-code/bin/kimi', args: ['acp'], promptFiles: ['AGENTS.md'] }),
+  antigravity: RuntimeProfileSchema.parse({ command: '~/.local/bin/agy', args: ['acp'], promptFiles: ['AGENTS.md'] }),
+  'claude-code': RuntimeProfileSchema.parse({ command: '~/.local/bin/claude-agent-acp', promptFiles: ['CLAUDE.md'] }),
+})
+/** Difficulty levels are local to a task type: the same S means different work for `code` and `creative`. */
+export const DifficultySchema = z.enum(['S', 'M', 'L'])
+export type Difficulty = z.infer<typeof DifficultySchema>
+const RubricSchema = z.object({ S: z.string().trim().default(''), M: z.string().trim().default(''), L: z.string().trim().default('') }).strict()
+  .default(() => ({ S: '', M: '', L: '' }))
+/** One task type, editable in the panel: its families decide the vendor order, its rubric decides difficulty. */
+export const DispatchTypeSchema = z.object({
+  id: z.string().trim().regex(/^[a-z][a-z0-9-]*$/),
+  name: z.string().trim().min(1).max(80),
+  description: z.string().trim().max(500).default(''),
+  /** Ordered family ids: the first one that has a healthy model for the difficulty wins. */
+  families: z.array(z.string().trim().min(1)).default([]),
+  rubric: RubricSchema,
+  /** `true` refuses a cross-family fallback: the ticket waits instead of silently changing style. */
+  strict: z.boolean().default(false),
+}).strict()
+export type DispatchType = z.infer<typeof DispatchTypeSchema>
+/** One vendor/family: a default harness and the model used at each difficulty. Empty model = not configured. */
+export const DispatchFamilySchema = z.object({
+  label: z.string().trim().min(1).max(80),
+  enabled: z.boolean().default(true),
+  harness: z.string().trim().min(1),
+  models: z.object({ S: z.string().trim().default(''), M: z.string().trim().default(''), L: z.string().trim().default('') }).strict()
+    .default(() => ({ S: '', M: '', L: '' })),
+  /** Per-model harness overrides, for a model reachable through more than one runtime. */
+  harnessByModel: z.record(z.string(), z.string()).default({}),
+  account: z.string().trim().default(''),
+}).strict()
+export type DispatchFamily = z.infer<typeof DispatchFamilySchema>
+/** A deterministic rule that pins a trigger to a task type before the Router is asked. */
+export const DispatchRuleSchema = z.object({
+  when: z.object({
+    label: z.string().trim().optional(),
+    source: z.string().trim().optional(),
+    chat: z.string().trim().optional(),
+    keyword: z.string().trim().optional(),
+  }).strict(),
+  type: z.string().trim().min(1),
+}).strict()
+/** One model's metadata; it is shown to people and never enters the Router's prompt. */
+export const DispatchModelSchema = z.object({
+  harness: z.string().trim().default(''),
+  effort: z.string().trim().default(''),
+  cost: z.string().trim().default(''),
+  note: z.string().trim().default(''),
+  maxCostUsd: z.number().min(0).max(10_000).optional(),
+}).strict()
+const defaultDispatchTypes = (): DispatchType[] => [
+  { id: 'research', name: '调研/核查', description: '调研、核查、对比、找资料', families: ['anthropic', 'deepseek', 'kimi'], rubric: { S: '查一个事实', M: '对比几个方案', L: '多源调研 + 结论' }, strict: false },
+  { id: 'creative', name: '设计/文案', description: '设计、文案、新闻稿、推文、海报', families: ['kimi', 'anthropic', 'deepseek'], rubric: { S: '改文案、间距、小图', M: '新页面、新组件、活动配图', L: '新视觉体系、活动主视觉' }, strict: false },
+  { id: 'writing', name: '文档', description: '文档、指南、模板、归档', families: ['anthropic', 'kimi', 'deepseek'], rubric: { S: '改一段话', M: '写/改一篇文档', L: '多篇整合、对外长文' }, strict: false },
+  { id: 'code', name: '代码', description: '实现、修 bug、重构、脚本', families: ['deepseek', 'anthropic', 'kimi'], rubric: { S: '单文件、明确修复', M: '几个文件 + 测试', L: '跨模块、方案不确定' }, strict: false },
+  { id: 'ops', name: '运维/接入', description: '服务器、账号、接入、数据', families: ['deepseek', 'anthropic', 'kimi'], rubric: { S: '查状态', M: '接入/配置', L: '迁移/部署' }, strict: false },
+  { id: 'coordination', name: '协调', description: '待办、活动、排期、群运营', families: ['deepseek', 'kimi'], rubric: { S: '列待办', M: '定活动/排期', L: '跨项目协调' }, strict: false },
+  { id: 'chat', name: '轻回复', description: '天气、转达、简单问答', families: ['deepseek'], rubric: { S: '一句话回答', M: '查一下再答', L: '需要长答' }, strict: false },
+]
+const defaultDispatchFamilies = (): Record<string, DispatchFamily> => ({
+  deepseek: { label: 'DeepSeek / DSH', enabled: true, harness: 'dsh', models: { S: '', M: '', L: '' }, harnessByModel: {}, account: '' },
+  kimi: { label: 'Kimi', enabled: false, harness: 'kimi-code',
+    models: { S: 'kimi-for-coding-highspeed', M: 'kimi-for-coding', L: 'k3.1-pro' }, harnessByModel: {}, account: '' },
+  anthropic: { label: 'Claude', enabled: false, harness: 'claude-code',
+    models: { S: 'haiku', M: 'sonnet', L: 'opus' }, harnessByModel: {}, account: '' },
+  antigravity: { label: 'Antigravity', enabled: false, harness: 'antigravity', models: { S: '', M: '', L: '' }, harnessByModel: {}, account: '' },
+})
+/**
+ * Worker routing: task type decides the family order, difficulty decides the model, and the table stays editable in
+ * the panel. `enabled: false` keeps the pre-existing DSH-only behaviour.
+ */
+export const DispatchConfigSchema = z.object({
+  enabled: z.boolean().default(false),
+  defaultType: z.string().trim().min(1).default('code'),
+  /** The family used when no configured family is available; its harness must be enabled, or the host uses DSH. */
+  fallbackFamily: z.string().trim().min(1).default('deepseek'),
+  types: z.array(DispatchTypeSchema).default(() => defaultDispatchTypes()),
+  families: z.record(z.string(), DispatchFamilySchema).default(() => defaultDispatchFamilies()),
+  models: z.record(z.string(), DispatchModelSchema).default({}),
+  /** Capability tags (browser, vision, feishu, ssh, repo) mapped to the families that satisfy them. */
+  capabilityFamilies: z.record(z.string(), z.array(z.string().trim().min(1))).default({}),
+  rules: z.array(DispatchRuleSchema).default([]),
+  escalateAfter: z.number().int().min(0).max(10).default(2),
+}).strict()
+export type DispatchConfig = z.infer<typeof DispatchConfigSchema>
+/** The Cloudflare Workers AI account and model that pick an emoji, and whether a pick runs at all. */
+export const MarksConfigSchema = z.object({
+  enabled: z.boolean().default(true),
+  account: z.string().trim().default(''),
+  /** Written by the panel; an API key, so it is masked in every read. An empty value falls back to the environment. */
+  token: z.string().trim().default(''),
+  model: z.string().trim().min(1).default('clef-flash'),
+  timeoutMs: z.number().int().min(500).max(15000).default(4000),
+}).strict()
+/** What a read returns where a secret is stored; saving the same text keeps the stored secret. */
+export const SETTINGS_MASK = '••••••'
 export const SettingsSchema = z.object({
   paused: z.boolean().default(false),
   sources: z.record(z.string().regex(/^[a-z][a-z0-9-]*$/), SourceInstanceSchema).default({}),
   policy: PolicyConfigSchema.default(() => PolicyConfigSchema.parse({})),
   eval: EvalConfigSchema.default(() => EvalConfigSchema.parse({})),
   executor: ExecutorConfigSchema.default(() => ExecutorConfigSchema.parse({})),
+  routing: RoutingConfigSchema.default(() => RoutingConfigSchema.parse({})),
+  marks: MarksConfigSchema.default(() => MarksConfigSchema.parse({})),
+  runtimes: z.record(z.string(), RuntimeProfileSchema).default(() => defaultRuntimes()),
+  dispatch: DispatchConfigSchema.default(() => DispatchConfigSchema.parse({})),
 }).strict()
 export type Settings = z.infer<typeof SettingsSchema>
-export type SettingsBlock = 'policy' | 'eval' | 'executor' | `source:${string}`
+export type SettingsBlock = 'policy' | 'eval' | 'executor' | 'routing' | 'marks' | 'runtimes' | 'dispatch' | `source:${string}`
 export type SettingsSave = SettingsBlock | 'pause'
 export type SettingsOrigin = 'panel' | 'tool' | 'sync'
 

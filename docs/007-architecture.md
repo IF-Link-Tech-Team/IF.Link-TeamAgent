@@ -197,7 +197,9 @@ That context supplies deployment and commands, setup readiness (`ready`, `config
 
 ### DshExecutor
 
-`DshExecutor` (`src/executor/dsh.ts`) provides one Session and directory per Ticket. `start` and `deliver` enqueue `launch` and `delivery` effects. `stop` cancels the turn through `Store.afterCommit`, so a rolled-back end does not stop the worker.
+`DispatchExecutor` (`src/executor/dispatch.ts`) is the Engine's `Executor`: its `prepare` adds the task type, difficulty and resolved route to the Ticket's `execution`, and its `start`/`deliver`/`stop` choose between the DSH and ACP implementations. It owns the `launch` and `delivery` effects for both, so one queue, one `WorkerSlots` and one pause switch govern both.
+
+`DshExecutor` (`src/executor/dsh.ts`) provides one Session and directory per Ticket. `launchNow` and `deliverNow` run the effects the dispatcher owns; `stop` cancels the turn through `Store.afterCommit`, so a rolled-back end does not stop the worker. It skips Tickets whose `execution.runtime` is not `dsh`, in `launch` and in `resume`.
 
 `prepare(ticket, outcome)` supplies the Engine's `prepareTicket` hook: short name, directory and `ticketExecution` assignment text. `workerSessionId(ticket.id)` derives the Session id.
 
@@ -206,6 +208,12 @@ That context supplies deployment and commands, setup readiness (`ready`, `config
 Transient provider and network failures get three retries. Launches use effect backoff; failed turns receive continuation messages after 15, 30 and 60 seconds. `inputMessage` renders each Input from current Ticket state, and `mandateInstructions` adds the matched-rule limits for inferred work.
 
 `install` subscribes to Session events; `dispose` unsubscribes. A turn end normally reports waiting, except after readiness or while human action is required. Errors report failed. At startup, `resume` reports interrupted Assignments through `assignmentInterrupted` and requeues pending launches that do not wait for a person, oldest Ticket first.
+
+### AcpExecutor
+
+`AcpExecutor` (`src/executor/acp.ts`) hosts a Ticket on an ACP agent. `launchNow` prepares the shared workspace, writes the worker prompt into the profile's prompt files, starts the profile command, runs ACP `initialize`, `session/new` (or `session/load`), selects the model through `session/set_config_option` when the profile says `config`, and sends the assignment. `deliverNow` queues an Input behind the current turn; `stop` sends `session/cancel` and then stops the process tree.
+
+`chooseRoute` (`src/app/dispatch.ts`) turns the type and difficulty into a family and model using `Settings.dispatch`; it never names a model itself. `WorkerMcpServer` (`src/app/mcp-server.ts`) serves the Ticket's `orchestrator_*` tools over the Unix socket, and `src/worker-mcp.ts` is the stdio relay a harness starts. An ACP turn that ends without a status becomes a `waiting` Report; a blocked, failed or dropped Report closes the run.
 
 ### MasterAssessor
 
@@ -299,7 +307,7 @@ Some generic modules still refer directly to GitHub or Feishu:
 | `src/limits.ts` | The limits of the values a person sets, which the settings schemas check and the panel's fields offer |
 | `src/feishu-emojis.ts` | Every emoji `im.reactions.create` accepts, with the Chinese each reads as and whether a working message may wear it |
 | `src/app/marks.ts` | `MarkPicker`: the decision model behind the emoji a took-up mark draws, and the fallback to the Channel's own |
-| `src/app/gestures.ts` | `Gestures`: a chat's pace of social reactions, refusing one to the same person within half an hour or above two an hour |
+| `src/app/gestures.ts` | `Gestures`: a chat's pace of social reactions, refusing one to the same person within the configured wait (30 minutes by default) or above the configured hourly count (two by default) |
 | `src/kv.ts` | `KV`: every family of `kv` records with its key, its value's type and its owner, and the `Key` and `Family` types the Store and `SourceContext.state` take |
 | `src/navigation.ts` | Opens a DeepSeek Harness Session from the panel once the host's catalog lists it |
 | `src/core/model.ts` | The domain types, among them the typed Ticket and `MandateBasis`, with `threadKey`, `ticketOutcome`, `reached`, `followupOwners`, `settled`, `waitsForPerson`, `liveTicket`, `runningAssignment`, `latestAssignment` and `latestReport` |
@@ -356,6 +364,12 @@ Some generic modules still refer directly to GitHub or Feishu:
 | `src/app/views/sources.ts` | The Source status: each Source instance's state, its last day's counts, and what it filtered and dropped in that day |
 | `src/app/views/settings.ts` | The settings page's view: each block with its revision, each Source's settings with its kind's form, and the execution environment |
 | `src/app/views/overview.ts` | The overview: Tickets that need a person, problems, the last day's flow and the Executor's load |
+| `src/app/dispatch.ts` | `chooseRoute`: the deterministic task type → family → model → runtime resolution, its `DispatchRoute` and `modelAt` |
+| `src/app/mcp-server.ts` | `WorkerMcpServer`: the Unix-socket MCP server that gives an external worker runtime its ticket's `orchestrator_*` tools |
+| `src/executor/dispatch.ts` | `DispatchExecutor`: the Engine's Executor port, choosing DSH or an ACP runtime per Assignment, and `ticketRoute` |
+| `src/executor/acp.ts` | `AcpExecutor`: one ACP process and session per Ticket, prompt injection, permission answers, transcript, turn and failure mapping |
+| `src/executor/workspace.ts` | `prepareWorkspace`, `copyMemory` and `PrepareFailed`: the ticket workspace both runtimes share |
+| `src/worker-mcp.ts` | The stdio MCP relay packaged as `lib/worker-mcp.js`; it forwards a harness's MCP messages to `WorkerMcpServer` |
 | `src/executor/dsh.ts` | The DshExecutor, `WorkerSlots`, `ticketExecution`, `inputMessage` and `mandateInstructions` |
 | `src/executor/background.ts` | A worker's background work in DeepSeek Harness, the shell jobs its Session owns (`ctx.jobs`) and its subagents (`ctx.subagents`): `runningJobs`, `untilQuiet`, `killJobs`, `collectJobs`, `stopSubagents`, `stopBackground`, `until`, and `cancelled`, the workers whose turn a stop of their subagents cancelled |
 | `src/infra/commands.ts` | `Commands`, the CLI transport: `run`; `api` and `pages`, limited to the configured repository and validated; `lark` as the bot; `git`. `CliError` carries the code a command's output reports, such as a GitHub HTTP status, and a command that prints nothing fails with how it ended, never with its arguments; `validItems` skips and counts the malformed items of a list |
@@ -377,6 +391,7 @@ Some generic modules still refer directly to GitHub or Feishu:
 | `src/sources/scheduler-job.ts` | The Scheduler's pure rules: schedule shapes with their next and last occurrence, the change stamp, the heartbeat judgement, and the index card a heartbeat reads |
 | `src/sources/clawchat-protocol.ts` | The ClawChat agent-side protocol: invite redemption and token refresh, the Protocol v2 WebSocket with its heartbeat and acks, and the frames as inbound messages |
 | `src/sources/feishu.ts` | The Feishu kind and plugin entry, exported as `./feishu-watch` |
+| `src/sources/feishu-config.ts` | The Feishu Source's configuration schema and the sweep cadences (`feishuTiming`), kept apart from the plugin entry so the loops can read them without a cycle |
 | `src/sources/feishu-trigger.ts` | Feishu messages as Triggers, by one rule for live events, history pages and topic pages |
 | `src/sources/feishu-loops.ts` | The Feishu loops: the event consumer, history recovery, chat names and polling of subscribed topics |
 | `src/sources/feishu-channel.ts` | The Feishu Channel: topic replies, `sent` or `gone` |
@@ -392,6 +407,7 @@ Some generic modules still refer directly to GitHub or Feishu:
 | `src/client/source.tsx`, `trigger.tsx`, `eval.tsx`, `execution.tsx` | One file per stage: its status, and its settings where it has some |
 | `src/client/thread.tsx`, `ticket.tsx` | The record pages: a Thread with its timeline, and a Ticket with its authorization, Inputs and Assignments |
 | `src/client/settings.tsx` | The Settings tab: the group navigation and the group on screen |
+| `src/client/routing.tsx` | `RuntimesBlock` and `DispatchBlock`: the panel editors for runtime profiles and the task-routing tables |
 | `src/client/settings-kit.tsx` | The building blocks of settings blocks: the settings the stage groups share, `useBlockDraft`, the fields, among them a Source kind's, and the history of saves |
 | `src/client/prompts.tsx` | The Prompts settings: the page owns the view it read and its editor the draft, and the Edit, Full prompt and History tabs render from them; a built-in part's editor shows a changed default and keeps or drops the override |
 | `src/client/prompt-config.ts` | The prompt configuration by section, by the team sections, skill names, built-in parts (`part/<key>`, with `withOverride`) and part headings the prompt views give, and the line diff of the full prompt, as pure functions |
@@ -431,6 +447,7 @@ Some generic modules still refer directly to GitHub or Feishu:
 | `tests/effects.spec.ts` | The effect queue: coalescing, limits, retries with backoff, health and shutdown |
 | `tests/passes.spec.ts` | Passes: one at a time, the ones asked for during a pass run as one after it, and the runtime health a failed pass reports |
 | `tests/outbox.spec.ts` | The Outbox on a running Runtime: messages wait while processing is paused or their Source is not installed |
+| `tests/gestures.spec.ts` | The pace of social reactions: one person held back for the configured time, a chat capped at the configured hourly count, and a saved pace applying at once |
 | `tests/cache.spec.ts` | `TextCache` |
 | `tests/queue.spec.ts` | The Runtime's work through the effect queue, and what earlier versions stored |
 | `tests/followups.spec.ts` | A person's follow-up on a Ticket's Thread: its notice to the main Session, the tools that act on it, what a burst costs; a worker's hand-back and context follow, and the main Session's note |
@@ -444,6 +461,9 @@ Some generic modules still refer directly to GitHub or Feishu:
 | `tests/http.spec.ts` | The same-origin and loopback checks, the status of each kind of failure, the body limit, path parameters and queries |
 | `tests/settings.spec.ts` | Settings saves that race a model or account check, a Policy sync that a save outran, the refusal of an unknown or repeated fallback route, and the refusals of the pause, a sync and a block |
 | `tests/model-router.spec.ts` | Route failover: the cooldown, walking a chain, the hop guard, Executor Sessions a person pointed elsewhere, the main Session's probe, and the degraded state |
+| `tests/dispatch.spec.ts` | Task routing: the disabled fallback, family order, difficulty-to-model resolution, nearest slots, rules, capability filters and a strict type |
+| `tests/acp.spec.ts` | The ACP executor: initialize, session/new, a prompt turn, its transcript, and the waiting report a turn without a status produces |
+| `tests/mcp-server.spec.ts` | The worker MCP server: initialize, tools/list, tools/call, and a token refused for another ticket |
 | `tests/views.spec.ts` | What the management views derive from the Store, such as the Thread a dropped message belongs to |
 | `tests/timeline.spec.ts` | A Thread's pages and a Trigger's neighbours by time and then id, with every received Trigger's time in one form |
 | `tests/migration.spec.ts` | The schema 11 migration: every stored record in its current shape, and the refusal of older schemas |
@@ -519,7 +539,7 @@ The main Session has 14 application tools:
 
 `orchestrator_route` accepts 1–20 decisions in order. Each accept, attach, stop or ignore runs as a separate Engine command. It also permits ignoring an inferred candidate directly from its card. `orchestrator_ticket_note` sends a fact as context, not authority.
 
-Settings saves select `policy`, `eval`, `executor`, `pause`, or `source`; the last also names its Source id. A prompt save with `preview: true` composes text without saving.
+Settings saves select `policy`, `eval`, `executor`, `routing`, `marks`, `pause`, or `source`; the last also names its Source id, and a `marks` token reads back as a mask. A prompt save with `preview: true` composes text without saving.
 
 The main Session also has DeepSeek Harness's `skill`, `bash`, `read`, `read_image`, `job_output`, `job_list` and `job_kill`. Avoiding code reads is a prompt rule, not a tool restriction.
 

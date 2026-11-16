@@ -108,6 +108,8 @@ export const ExecutorConfigSchema = z.object({
 - 删空 = 不启用 fallback，合法。
 - 保存沿用现有 draft / SaveBar；校验错误定位到具体行。
 
+**冷却与探活也进面板（2026-11-15 补）**：Execution → 设置 → 「模型路由与备用链」有两个数：失败路由冷却秒数（默认 300，10–3600）和主路由探活间隔秒数（默认 60，10–600）。前者决定一条路由失败后被跳过多久，后者决定主 Session 冷却期间多久发一次 8-token 探针。两项都存在 `routing` 设置块里，`ModelRouter` 每次打开冷却、每次排下一次探针时重读，保存后下一次失败/探针就生效，不用重启。
+
 ## 六、运行时语义
 
 ### 6.1 选路
@@ -216,8 +218,8 @@ target ≠ resolved 时覆盖 provider/model/effort（不继承旧 effort）
 | 历史可读 | 新增 `change.evalFallbacks` / `change.executorFallbacks`，连同顺序一起显示 | `src/app/settings-history.ts`、`src/client/locales.ts` |
 | 面板链编辑器 | 加/删/拖动（HTML5 DnD）+ ↑/↓ 按钮 + 行内健康点；候选项来自 `GET models`；重复项按钮置灰并说明 | `src/client/settings-kit.tsx`（`ModelChainField`）、`eval.tsx`、`execution.tsx`、`client.css` |
 | 运行时选路 | `ModelRouter`：每次请求读设置，取链上第一个未冷却的路由；主 Session 始终受管（改主模型立即生效，F5 顺手解决），Executor Session 只在跑配置模型时受管 | `src/app/model-router.ts` |
-| 熔断与跳数 | 按 provider×model 记冷却（默认 5 分钟），同一 turn/step 最多跳满整条链 | 同上 |
-| 主 Session 探活 | 主路由冷却期间每 60 秒发一个 8-token 的探针；成功即提前关冷却 | 同上 |
+| 熔断与跳数 | 按 provider×model 记冷却（默认 5 分钟，面板可改），同一 turn/step 最多跳满整条链 | 同上 |
+| 主 Session 探活 | 主路由冷却期间每 60 秒（面板可改）发一个 8-token 的探针；成功即提前关冷却 | 同上 |
 | 失败后续跑 | 主 Session 的 `agent/error` 分支：路由真的换过才补一句"接着刚才的继续"，不空转 Eval 死线 | `src/executor/dsh.ts`（`masterFailed`） |
 | 降级收自治 | 主 Session 不在主模型上时 `admitsInferred` 拒绝推断式准入 | `src/policy.ts`、`src/app/runtime.ts` |
 | 可观测 | `model-fallback` health：有路由冷却即 `error`，恢复即 `ready`；同时进 Overview 的 runtime-error 与现有巡检的"健康检查未就绪"告警 | `src/app/runtime.ts`、`src/app/views/settings.ts` |

@@ -7,7 +7,7 @@ import { SaveBar } from './draft.tsx'
 import { sourceMark } from './marks.ts'
 import { usePanel, usePanelData } from './provider.tsx'
 import { setupPage, settingsRoute, type Route } from './route.ts'
-import { ConfigHistory, Fields, SourceField, useBlockDraft, useSettings } from './settings-kit.tsx'
+import { ConfigHistory, Fields, readPath, SourceField, useBlockDraft, useSettings, writePath } from './settings-kit.tsx'
 import { actorName, healthText, localized, readableMarkers, reasonLabel, valueLabel, when } from './text.ts'
 import { CheckSetupButton, Hint, LabelValue, LoadState, SetupMessage, StatusHead, When } from './widgets.tsx'
 
@@ -21,15 +21,16 @@ function SourceCard({ source }: { source: SourceView }) {
   const draft = useBlockDraft(`source:${source.id}`, source.value, source.revision)
   const value = draft.value
   const { problem, value: saved } = source
-  const changed = (key: string) => String(value.config[key] ?? '') !== String(saved.config[key] ?? '')
+  const changed = (key: string) => JSON.stringify(readPath(value.config, key)) !== JSON.stringify(readPath(saved.config, key))
   // Saving a modified setup-sensitive field restarts dsh-superagent, interrupting running Assignments.
   const restarts = draft.dirty && source.restarts.some(changed)
   const description = localized(t, source.description)
   // Hide derived facts for unsaved field edits until the new value is saved.
-  const field = (spec: FieldSpec) => <SourceField key={spec.key} field={spec} value={value.config[spec.key]} saved={saved.config[spec.key]}
+  const field = (spec: FieldSpec) => <SourceField key={spec.key} field={spec} value={readPath(value.config, spec.key)}
+    saved={readPath(saved.config, spec.key)}
     labels={source.labels}
     refreshLabels={refreshLabels} fact={spec.type === 'fact' || !changed(spec.key) ? source.facts[spec.key] : undefined}
-    onChange={next => draft.edit({ ...value, config: { ...value.config, [spec.key]: next } })} />
+    onChange={next => draft.edit({ ...value, config: writePath(value.config, spec.key, next) })} />
   const advanced = source.fields.filter(spec => spec.advanced)
   return <form id={`dt-source-${source.id}`} className="dt-card" onSubmit={event => { void draft.submit(event) }}>
     <Fields disabled={draft.busy}>

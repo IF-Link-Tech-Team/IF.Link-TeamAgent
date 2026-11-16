@@ -175,3 +175,21 @@ it('adds, reorders and removes fallback routes in the panel, and saves the order
   await click(zh.save)
   expect(server.settings.executor.fallbacks).toEqual([{ provider: 'backup-provider', model: 'backup-model' }])
 })
+
+it('renders the worker-runtime and task-routing editors from settings', async () => {
+  await mount()
+  await click(zh['tab.execution'])
+  await click(find(zh['tab.settings'], '.dt-status-head button'))
+  expect(text()).toContain(zh.runtimeTitle)
+  expect(text()).toContain('kimi-code')
+  expect(text()).toContain(zh.dispatchTitle)
+  expect(text()).toContain('creative')
+  // Enabling dispatch and saving writes the setting rather than a hardcoded route.
+  await type(field<HTMLSelectElement>(zh.dispatchDefaultType), 'creative')
+  const dispatchForm = [...document.querySelectorAll('form')].find(form => form.textContent?.includes(zh.dispatchTitle))!
+  const save = [...dispatchForm.querySelectorAll<HTMLButtonElement>('.dt-savebar button')].find(button => button.textContent === zh.save)!
+  await click(save)
+  expect(server.requests.map(request => request.path)).toContain('settings/dispatch')
+  expect(server.settings.dispatch.defaultType).toBe('creative')
+})
+

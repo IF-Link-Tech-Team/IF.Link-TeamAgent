@@ -22,11 +22,25 @@ An `idle` Ticket has finished its turn without an outstanding question. A Trigge
 
 ## The Executor
 
-Each Ticket gets an Executor Session named `worker-<ticket id>` and a directory named after the Ticket's short name. Directories are created under the configured execution root, which defaults to `<stateDir>/work`.
+A DSH Ticket gets an Executor Session named `worker-<ticket id>` and a directory named after the Ticket's short name. Directories are created under the configured execution root, which defaults to `<stateDir>/work`; an external runtime uses the same directory.
 
 Executor Sessions run commands without approval as the operator's OS user. Their `dsh-superagent-worker` preset contains the tools needed for work and moves foreground shell commands to background jobs after 5 seconds. This lets a worker receive new messages at the next step instead of waiting for a long command to finish.
 
 The main Session uses `dsh-superagent-router`, with the same 5-second shell and job-wait limits and a smaller tool set for routing. Sessions retain the preset selected at creation. Worker subagents use DeepSeek Harness's `standard` preset.
+
+### Worker runtimes and routing
+
+A Ticket runs on a worker runtime: `dsh` keeps the Session described above, while an external runtime starts an Agent Client Protocol (ACP) process in the same Ticket directory. **Execution → Runtimes** holds each runtime's command, arguments, prompt files, model-selection mode, concurrency and limits; **Execution → Routing** holds the task types, the family order, the S/M/L model table and the deterministic rules. Neither table is code.
+
+At accept, the Router names a task type and a difficulty (S/M/L) when it can; the host resolves them without a model call:
+
+```
+type → ordered families → model = family.models[difficulty] → harness = family.harness
+```
+
+A rule, matched rule label or the default settles the type; an empty model slot borrows the nearest one; a disabled runtime or family is skipped; when nothing is available the Ticket falls back to DSH and records `degraded`. A Ticket keeps the route it was accepted with. `dispatch.enabled` off keeps every Ticket on DSH with the existing Executor model.
+
+An ACP runtime receives the worker prompt in `AGENTS.md` (and any other file its profile names), gets the six `orchestrator_*` tools through a per-Ticket MCP server over a Unix socket, and writes its protocol transcript to `<ticket>/.teamagent/transcript.ndjson`. A turn that ends without `orchestrator_report` becomes a `waiting` Report carrying its last words. `session/load` resumes a saved session; when it cannot, a new session starts from the Ticket directory. There is no mid-turn steering: an Input waits for the next turn unless a person interrupts and delivers it.
 
 ### Background work and worker slots
 

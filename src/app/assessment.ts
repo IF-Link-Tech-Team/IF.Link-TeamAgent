@@ -29,6 +29,9 @@ export const AssessmentSchema = z.object({
   scope: z.string().max(1500),
   intent_evidence: z.string().trim().min(1).max(700).nullish().describe('For acceptance: the quotes that establish the three facts.'),
   acknowledgement: AcknowledgementSchema.nullish().describe('For acceptance: one sentence in the source language, posted as a reply to the trigger; omit only when a matched rule asks for silence.'),
+  type: z.string().max(40).nullish().describe('For acceptance: the task type id from the routing table; omit to use the matched rule or default.'),
+  difficulty: z.enum(['S', 'M', 'L']).nullish().describe('For acceptance: S/M/L under that type\'s rubric; default M.'),
+  needs: z.array(z.string().max(40)).max(5).nullish().describe('For acceptance: capability tags such as browser, vision, feishu, ssh, repo.'),
   /** What a message that asks for no work reads as: how much it asks for a gesture (0-5) and of what kind. */
   gesture: z.object({ score: z.number().int().min(0).max(5),
     intent: z.enum(['celebrate', 'applause', 'laugh', 'comfort', 'hype', 'respect', 'surprise', 'tease', 'aww', 'ouch', 'thanks', 'agree']) })

@@ -238,7 +238,7 @@ describe('settings migration', () => {
       sources: { feishu: { enabled: true, config: { chats: [], directMessages: true }, authority: { chats: [] } } },
     }))
     expect(saved.policy).toEqual({
-      gestures: { mode: 'observe' },
+      gestures: { mode: 'observe', personMinutes: 30, perHour: 2 },
       rules: [{ id: 'visual', name: 'V', enabled: true, kind: 'work', instruction: 'x' }],
       sources: { feishu: { allowed: [{ id: MEMBER, name: 'Alice' }, { id: 'ou_bob', name: 'Bob' }], syncChat: CHAT, admission: {} }, github: { allowed: [{ id: 'alice' }, { id: 'carol' }], admission: {} } },
     })
@@ -253,9 +253,13 @@ describe('settings migration', () => {
     expect(migrated).toEqual({
       paused: true,
       sources: { feishu: feishuSource({ chats: [{ chatId: CHAT, listen: 'mentions' }, { chatId: OBSERVED, listen: 'all' }], directMessages: false }), github: { enabled: true, config: { pollSeconds: 120 } } },
-      policy: { gestures: { mode: 'observe' }, rules: [], sources: { feishu: { allowed: [{ id: MEMBER, name: 'A' }], admission: {} }, github: { allowed: [{ id: 'a' }], admission: {} } } },
+      policy: { gestures: { mode: 'observe', personMinutes: 30, perHour: 2 }, rules: [], sources: { feishu: { allowed: [{ id: MEMBER, name: 'A' }], admission: {} }, github: { allowed: [{ id: 'a' }], admission: {} } } },
       eval: { mode: 'auto', quietSeconds: 0, timeoutSeconds: 90, model: { provider: 'p', model: 'm' }, fallbacks: [] },
       executor: { model: null, fallbacks: [], maxWorkers: 5, directory: '', prepare: '', blockedCommands: [] },
+      routing: { cooldownSeconds: 300, probeSeconds: 60 },
+      marks: { enabled: true, account: '', token: '', model: 'clef-flash', timeoutMs: 4000 },
+      runtimes: SettingsSchema.parse({}).runtimes,
+      dispatch: SettingsSchema.parse({}).dispatch,
     })
     expect(migrateSettings(migrated)).toEqual(migrated)
   })

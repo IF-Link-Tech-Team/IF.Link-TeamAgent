@@ -1,0 +1,95 @@
+# 飞书 API 请求计数器（本地网络层）
+
+数这台机器**实际发出**的飞书 HTTP 请求，不依赖编排进程里的埋点。
+
+## 为什么不用应用内计数
+
+编排进程里的计数器数的是"自己发出的 CLI 调用"，看不到三类东西：
+
+| 看不到的 | 例子 |
+|---|---|
+| 一次 CLI 调用内部的翻页 | `im +chat-list --page-all` 打 7 个 HTTP 请求，计 1 |
+| 别人的调用 | 工单会话里的 `lark-user`、dreaming 任务、人在终端敲的 `lark-cli` |
+| 认证请求 | 每个进程一次 `/oauth/v3/token` |
+
+代理数的是 HTTP 请求本身，所以这三类都在里面。代价是它只知道"谁调、调了哪个端点"，不知道"为什么调"
+（兜底扫描还是线程轮询），那部分仍然靠编排进程的分出口计数。两边一起看才完整。
+
+## 怎么工作
+
+```
+lark-cli ──HTTPS_PROXY──▶ 127.0.0.1:18080（本代理）
+                            ├─ CONNECT 200，用本地 CA 给目标域名现场签一张证书
+                            ├─ 终止 TLS，解析请求行
+                            ├─ 转发上游（真实证书校验不变）
+                            ├─ 写一行：时间 / 域名 / 方法 / 路径 / 状态 / 耗时 / pid / 调用方角色
+                            └─ 响应原样回给客户端
+```
+
+- **归因**：`SO_PEERCRED` 拿到调用方 pid，读 `/proc/<pid>/cmdline`，再往上走 4 层父进程，分成
+  `orchestrator`（编排进程的轮询）、`worker`（工单会话）、`dreaming`、`cli`（人在终端）。
+- **长连接**：WebSocket 升级后切成裸字节转发，记一行 `kind=stream`，不算接口调用。
+- **降级**：某个域名签不出证书时，这条隧道按字节直通——请求照常成功，只是没被计数。宁可少记，不能把
+  lark-cli 弄挂。
+
+## 安装
+
+```bash
+cd ~/TeamAgent/dsh-superagent-prototype-IF.Link/tools/feishu-counter
+chmod +x counter.py ca.sh report.py
+./ca.sh                                   # 生成 CA + 合并信任包（系统 CA 也在里面）
+mkdir -p ~/.config/systemd/user
+cp feishu-counter.service ~/.config/systemd/user/
+systemctl --user daemon-reload
+systemctl --user enable --now feishu-counter.service
+```
+
+然后让 `lark-cli` 走代理。两个包装脚本 `~/.local/bin/lark-bot`、`~/.local/bin/lark-user` 已经这么做了
+（先探测端口，代理没起就照常直连，不会因为代理挂了而调不通）：
+
+```sh
+if exec 3<>/dev/tcp/127.0.0.1/18080 2>/dev/null; then
+  exec 3>&-
+  export HTTPS_PROXY=http://127.0.0.1:18080
+  export SSL_CERT_FILE="$HOME/.dsh/feishu-counter/bundle.pem"
+  export NO_PROXY=127.0.0.1,localhost
+fi
+```
+
+> 想覆盖所有子进程（例如工单里直接 `lark-cli` 而不是走包装脚本），也可以把上面三个变量写进
+> `dsh-superagent.service` 的 `Environment=`。代价是那个进程里所有 HTTPS 流量都会经过代理；
+> `SSL_CERT_FILE` 已经是合并包，别的服务不会因此失败。
+
+## 验证
+
+```bash
+lark-bot im +chat-list --page-size 3 >/dev/null
+./report.py            # 当天应出现 GET /open-apis/im/v1/chats
+```
+
+跨天的对照表里，"编排自记"一列来自 `~/.dsh/state/superagent/orchestrator.sqlite` 的
+`feishu-calls:<日期>`，最后一列是差。差值不是错误，是口径差异，看 `--by role` 就知道差在谁身上。
+
+## 数据
+
+- `~/.dsh/feishu-counter/counter.sqlite`：一行一个请求，WAL 模式，写入在单独线程里。
+- `~/.dsh/feishu-counter/ca.key`：**CA 私钥，0600**。它能冒充本机看到的飞书流量，别外拷。
+- `~/.dsh/feishu-counter/certs/`：按域名缓存的证书，删掉会自动重签。
+
+## 卸载
+
+```bash
+systemctl --user disable --now feishu-counter.service
+rm ~/.config/systemd/user/feishu-counter.service
+# 还原包装脚本（去掉那 6 行），或者保留——代理没起时它们本来就会直连
+rm -rf ~/.dsh/feishu-counter
+```
+
+## 已知限制
+
+- 只覆盖设置了 `HTTPS_PROXY` 的进程。绕开包装脚本、又没继承环境变量的调用不会被计数。
+- 代理是单点：它挂了、而调用方仍然带着 `HTTPS_PROXY`，那些调用会失败。包装脚本的端口探测避免了这一点，
+  直接写环境的部署没有这层保护。
+- 假设 lark-cli 认 `SSL_CERT_FILE`（Go 标准库行为，2026-11-16 实测 1.0.100 可用）。将来若改成证书固定，
+  代理会退化成一串连接错误——那时应回退到只统计 CONNECT 次数。
+- 只统计到"端点"层，不解析响应体，不存消息内容。

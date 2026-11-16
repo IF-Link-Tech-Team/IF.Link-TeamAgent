@@ -21,6 +21,9 @@ import type { Deployment, Machine } from '../deployment.ts'
 import { environmentOf, ticketEnvironment, type Variable } from './execution-environment.ts'
 import type { SetupProblem } from '../setup.ts'
 import { DshExecutor, sourceTrigger, triggerMessage, workerSessionId } from '../executor/dsh.ts'
+import { AcpExecutor } from '../executor/acp.ts'
+import { DispatchExecutor } from '../executor/dispatch.ts'
+import { WorkerMcpServer } from './mcp-server.ts'
 import { ticketCard } from './cards.ts'
 import { MasterAssessor } from './assessment.ts'
 import { KV } from '../kv.ts'
@@ -35,7 +38,7 @@ import { candidateCard, repliedTo, sourceLink, type LinkHost } from './links.ts'
 import { eventNotice, followupNotice } from './notices.ts'
 import { pullEndNotices } from '../sources/github-pull.ts'
 import { HealthBoard } from '../infra/health.ts'
-import { MarkPicker } from './marks.ts'
+import { MarkPicker, type MarkChooser } from './marks.ts'
 import { Gestures } from './gestures.ts'
 import { Outbox } from './outbox.ts'
 import { Passes } from './passes.ts'
@@ -69,7 +72,8 @@ export class Runtime extends Service implements SourceHost {
   readonly sessions: Sessions
   readonly settings: Settings
   readonly router: ModelRouter
-  readonly executor: DshExecutor
+  readonly executor: DispatchExecutor
+  readonly mcp: WorkerMcpServer
   readonly assessor: MasterAssessor
   readonly outbox: Outbox
   readonly engine: Engine
@@ -133,25 +137,56 @@ export class Runtime extends Service implements SourceHost {
       const policyChanged: EngineForSettings['policyChanged'] = (from, to, effects) => { this.engine.policyChanged(from, to, effects) }
       this.settings = new Settings({ store, sources, engine: { policyChanged }, health: board, context: ctx, lifetime: this.lifetime, sessions,
         sourceHost: this, setup, requestPass: () => { this.passes.request() } })
-      this.executor = new DshExecutor({ context: ctx, get engine() { return runtime.engine }, store, effects, health: board.claim('worker'), machine,
-        lifetime: this.lifetime, sessions, masterId, get router() { return runtime.router },
+      const mcp = this.mcp = new WorkerMcpServer({ stateDir: machine.stateDir, lifetime: this.lifetime,
+        tools: id => {
+          const ticket = store.tickets.get(id)
+          return ticket ? executorTools(this.toolHost, ticket) : []
+        } })
+      const dsh = new DshExecutor({ context: ctx, get engine() { return runtime.engine }, store, effects, health: board.claim('worker'), machine,
+        lifetime: this.lifetime, sessions, masterId, get router() { return runtime.router }, registerEffects: false,
         closing: () => this.closing(), paused: () => this.paused(), environment, sourceLink: link,
         repliedTo: trigger => repliedTo({ store, sources }, trigger) })
+      const acp = new AcpExecutor({ context: ctx, get engine() { return runtime.engine }, store, effects, machine, lifetime: this.lifetime,
+        slots: dsh.workerSlots, prompts, mcp, health: board.claim('worker:acp', { state: 'paused', detail: 'No external runtime launched yet' }),
+        environment, closing: () => this.closing(), paused: () => this.paused(), relay: (id, text) => sessions.relay(id, text) })
+      this.executor = new DispatchExecutor({ store, effects, dsh, acp, paused: () => this.paused() })
       this.assessor = new MasterAssessor({ get engine() { return runtime.engine }, commands, get deployment() { return setup.deployment }, effects,
         settings: () => store.settings(), paused: () => this.paused(), threadContext: trigger => sources.threadContext(trigger),
         deliver: (id, text) => sessions.prompt(masterId, id, text, 'steer'), candidateCard: candidate => candidateCard(links, candidate) })
-      // The pick reads the message and the work around it; without an account it stays quiet and a Channel draws its own mark.
+      // The pick reads the message and the work around it. Its account and model come from the Marks settings on every
+      // pick, falling back to the environment; without either it stays quiet and a Channel draws its own mark.
       const marksHealth = board.claim('marks', { state: 'ready', detail: 'No mark picked yet' })
-      const marks = new MarkPicker({ store, health: marksHealth }, { account: process.env.CLOUDFLARE_ACCOUNT_ID ?? '',
-        token: process.env.CLOUDFLARE_WORKERS_AI_API_KEY ?? process.env.CLOUDFLARE_API_KEY ?? '' })
-      if (!marks.configured) marksHealth.set({ state: 'paused', detail: 'CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_WORKERS_AI_API_KEY are unset',
-        at: new Date().toISOString() })
+      const markAccount = () => {
+        const config = store.settings().marks
+        return { config, account: config.account || process.env.CLOUDFLARE_ACCOUNT_ID || '',
+          token: config.token || process.env.CLOUDFLARE_WORKERS_AI_API_KEY || process.env.CLOUDFLARE_API_KEY || '' }
+      }
+      const marks: MarkChooser = { pick: async message => {
+        const { config, account, token } = markAccount()
+        if (!config.enabled) {
+          marksHealth.set({ state: 'paused', detail: 'Mark picking is off', at: new Date().toISOString() })
+          return undefined
+        }
+        if (!account || !token) {
+          marksHealth.set({ state: 'paused', detail: 'Set the Cloudflare account and token in the Marks settings, or in CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_WORKERS_AI_API_KEY',
+            at: new Date().toISOString() })
+          return undefined
+        }
+        return new MarkPicker({ store, health: marksHealth }, { account, token, model: config.model, timeoutMs: config.timeoutMs }).pick(message)
+      } }
+      // Report the starting state once; a later save is reflected by the next pick.
+      const initialMarks = markAccount()
+      if (!initialMarks.config.enabled) marksHealth.set({ state: 'paused', detail: 'Mark picking is off', at: new Date().toISOString() })
+      else if (!initialMarks.account || !initialMarks.token) marksHealth.set({ state: 'paused',
+        detail: 'Set the Cloudflare account and token in the Marks settings', at: new Date().toISOString() })
+      else marksHealth.set({ state: 'ready', detail: 'Ready to pick an emoji', at: new Date().toISOString() })
       const outbox = this.outbox = new Outbox({ store, effects, sources, commands, marks, paused: () => this.paused() })
       const { assessor, executor } = this
       const policy = () => settingsPolicy(store.settings(), sources, { degraded: this.router.degraded() })
       // Kept in memory: a Source reads it to decide whether a model call is worth it, and a restart may refresh it.
       const activity: { lastEventAt?: number; lastHumanAt?: number; humanTriggers: number } = { humanTriggers: 0 }
-      const engine = this.engine = new Engine({ repo: store, scope: sources, policy, assessor, executor, gestures: new Gestures(store),
+      const engine = this.engine = new Engine({ repo: store, scope: sources, policy, assessor, executor,
+        gestures: new Gestures(store, Date.now, () => store.settings().policy.gestures),
         outbox, prepareTicket: (ticket, outcome) => executor.prepare(ticket, outcome), emit: event => {
           activity.lastEventAt = Date.parse(event.at)
           if (event.type === 'trigger.received' && store.triggers.get(event.data.triggerId)?.human) {
@@ -233,6 +268,7 @@ export class Runtime extends Service implements SourceHost {
     this.sessions.install()
     // Before any Session may send a request: routing listeners and the main Session's recovery probe.
     this.router.install()
+    this.mcp.install()
     this.executor.install()
     await this.sessions.ensure(this.masterId, this.machine.stateDir, 'dsh-superagent orchestrator', 'orchestrator')
     for (const id of this.settings.syncable()) await this.settings.sync(id).catch(() => { /* sync() records its failure in health. */ })
@@ -266,6 +302,7 @@ export class Runtime extends Service implements SourceHost {
       // The workers' jobs and subagents stop too: their ends would start worker turns without the tool limits released below.
       await this.executor.shutdown()
       this.executor.dispose()
+      this.mcp.dispose()
       this.sessions.dispose()
       this.router.dispose()
       for (const dispose of this.disposers.reverse()) dispose()

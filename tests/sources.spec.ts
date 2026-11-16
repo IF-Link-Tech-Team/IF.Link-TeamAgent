@@ -9,6 +9,7 @@ import { apply as applyFeishu, pollThreads as pollFeishuThreads } from '../src/s
 import { admitsBackfill, catchUpGap, FEISHU_TIMING, feishuCache, historyFailureHealth, noteFeishuCalls, noteFeishuEvent,
   requestFeishuCatchUp, resetFeishuLoops, runFeishu, sweepChatTopics, threadDue }
   from '../src/sources/feishu-loops.ts'
+import { feishuTiming } from '../src/sources/feishu-config.ts'
 import { commentTrigger, githubAddress, githubChannel, issueTrigger, type GithubComment, type GithubIssue } from '../src/sources/github-trigger.ts'
 import { claimPull, observePull, pullEndNotices, pullOf, ticketBranch, type Pull } from '../src/sources/github-pull.ts'
 import { ciCounts, ciFact, ciSummary } from '../src/sources/github-read.ts'
@@ -229,6 +230,14 @@ describe('feishu source', () => {
     expect(FEISHU_TIMING).toEqual({ chatSweep: 60 * minute, topicHot: 30 * minute, topicRecent: 720 * minute, topicSweep: 120 * minute,
       catchUpForce: 30 * minute, threadPoll: 10 * minute, threadRecent: 60 * minute, chatNames: 60 * minute })
     for (const value of Object.values(FEISHU_TIMING)) expect(value).toBeGreaterThanOrEqual(minute)
+  })
+  it('takes the sweep cadences from the saved configuration, so the panel applies one on the next round', () => {
+    const minute = 60_000
+    const timing = feishuTiming({ threadPollMinutes: 120, chatSweepMinutes: 1440, historyFailureRounds: 5 })
+    expect(timing.threadPoll).toBe(120 * minute)
+    expect(timing.chatSweep).toBe(1440 * minute)
+    // An absent field keeps its default instead of turning into zero.
+    expect(timing.topicSweep).toBe(120 * minute)
   })
   it('measures how long the last round has been gone, so a quick restart can skip the full topic pass', () => {
     const h = host()

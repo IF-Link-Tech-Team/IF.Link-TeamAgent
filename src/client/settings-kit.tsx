@@ -13,6 +13,19 @@ import { Hint, LoadState } from './widgets.tsx'
 
 /** Parse a numeric input string, returning `null` when empty so the server rejects blank required numbers instead of coercing to 0. */
 export const numberOf = (text: string): number | null => text.trim() ? Number(text) : null
+/** Read a dotted path (`heartbeat.activeHours.start`) out of a source's configuration object. */
+export function readPath(source: Record<string, unknown>, path: string): unknown {
+  return path.split('.').reduce<unknown>((value, key) => value && typeof value === 'object'
+    ? (value as Record<string, unknown>)[key] : undefined, source)
+}
+/** Copy `source` along `path` and set the leaf, so React state and drafts never share a nested object with the saved value. */
+export function writePath(source: Record<string, unknown>, path: string, value: unknown): Record<string, unknown> {
+  const [head, ...rest] = path.split('.')
+  if (!head) return source
+  const child = source[head]
+  return { ...source, [head]: rest.length ? writePath(child && typeof child === 'object' ? child as Record<string, unknown> : {},
+    rest.join('.'), value) : value }
+}
 interface SettingsData { settings: SettingsView; reload: () => Promise<void> }
 const SettingsContext = createContext<SettingsData | undefined>(undefined)
 export function useSettings(): SettingsData {
@@ -255,10 +268,44 @@ export function ConfigHistory({ blocks, versions, focus }: { blocks: string[]; v
   </DisclosureRow>
 }
 
-type Row = Record<string, string>
+type Row = Record<string, unknown>
 type Column = Extract<FieldSpec, { type: 'rows' }>['columns'][number]
 const ROWS_SHOWN = 6
 const byName = ([, a]: [string, string], [, b]: [string, string]) => a.localeCompare(b)
+type ScheduleValue = { kind: 'daily' | 'weekly' | 'every'; at?: string; weekday?: number; hours?: number }
+/** The schedule a row holds, normalized so a row added a moment ago already shows usable controls. */
+function asSchedule(value: unknown): ScheduleValue {
+  const record = value && typeof value === 'object' ? value as Partial<ScheduleValue> : {}
+  if (record.kind === 'weekly') return { kind: 'weekly', weekday: record.weekday ?? 1, at: record.at ?? '09:30' }
+  if (record.kind === 'every') return { kind: 'every', hours: record.hours ?? 12 }
+  return { kind: 'daily', at: record.at ?? '09:30' }
+}
+/**
+ * One job's schedule as three shapes rather than a cron string: daily at a wall-clock time, weekly on a weekday, or
+ * every N hours. The fields shown follow the shape, so a wrong field name cannot silently never fire.
+ */
+function ScheduleInput({ value, onChange }: { value: unknown; onChange: (next: ScheduleValue) => void }) {
+  const { t } = usePanel()
+  const schedule = asSchedule(value)
+  const kind = (next: ScheduleValue['kind']) => onChange(next === 'daily' ? { kind: next, at: schedule.at ?? '09:30' }
+    : next === 'weekly' ? { kind: next, weekday: schedule.weekday ?? 1, at: schedule.at ?? '09:30' } : { kind: next, hours: schedule.hours ?? 12 })
+  return <span className="dt-schedule">
+    <select className="dt-select" aria-label={t('scheduleKind')} value={schedule.kind}
+      onChange={event => kind(event.target.value as ScheduleValue['kind'])}>
+      {(['daily', 'weekly', 'every'] as const).map(option => <option key={option} value={option}>{t(`scheduleKind.${option}`)}</option>)}
+    </select>
+    {schedule.kind === 'every'
+      ? <span className="dt-schedule-every"><Input type="number" min={1} max={168} required aria-label={t('scheduleHours')}
+        value={String(schedule.hours ?? '')} onChange={event => onChange({ ...schedule, hours: event.target.value === '' ? undefined
+          : Number(event.target.value) })} /><span className="dt-hint">{t('scheduleHoursUnit')}</span></span>
+      : <Input type="time" required aria-label={t('scheduleAt')} value={schedule.at ?? ''}
+        onChange={event => onChange({ ...schedule, at: event.target.value })} />}
+    {schedule.kind === 'weekly' && <select className="dt-select" aria-label={t('scheduleWeekday')} value={String(schedule.weekday ?? 1)}
+      onChange={event => onChange({ ...schedule, weekday: Number(event.target.value) })}>
+      {[1, 2, 3, 4, 5, 6, 7].map(day => <option key={day} value={day}>{valueLabel(t, 'weekday', String(day))}</option>)}
+    </select>}
+  </span>
+}
 function RowsField({ field, value, saved, onChange, labels, refreshLabels }: {
   field: Extract<FieldSpec, { type: 'rows' }>; value: unknown; saved: unknown; onChange: (next: unknown) => void; labels: Record<string,
     string>
@@ -276,37 +323,68 @@ function RowsField({ field, value, saved, onChange, labels, refreshLabels }: {
   const rows = Array.isArray(value) ? value as Row[] : []
   const set = (index: number, row: Row) => onChange(rows.map((item, position) => position === index ? row : item))
   const key = field.columns[0]!
-  const savedKeys = new Set((Array.isArray(saved) ? saved as Row[] : []).map(row => row[key.key]))
+  const savedKeys = new Set((Array.isArray(saved) ? saved as Row[] : []).map(row => String(row[key.key] ?? '')))
   const choose = key.type === 'text' && key.choose && Object.keys(labels).length ? localized(t, key.choose) : ''
   // Exclude options already selected in another row.
   const choices = (id: string) => Object.entries(labels).filter(([option]) => option === id
-    || !rows.some(other => other[key.key] === option)).sort(byName)
-  const blank = Object.fromEntries(field.columns.map(column => [column.key, column.type === 'select' ? column.options[0]!.value : '']))
+    || !rows.some(other => String(other[key.key] ?? '') === option)).sort(byName)
+  const blank = Object.fromEntries(field.columns.map(column => [column.key, column.type === 'select' ? column.options[0]!.value
+    : column.type === 'switch' ? (column.initial ?? false)
+      : column.type === 'schedule' ? { kind: 'daily', at: '09:30' }
+        : column.type === 'time' ? '09:30' : '']))
   // Summarize a row by its second column only when that column is free text (e.g., a display name), not a select option.
   const named = field.columns[1]?.type === 'text' ? field.columns[1] : undefined
-  const rowName = (row: Row) => (named && row[named.key]) || labels[row[key.key] ?? ''] || row[key.key] || ''
+  const rowName = (row: Row) => (named && typeof row[named.key] === 'string' ? row[named.key] as string : '')
+    || labels[String(row[key.key] ?? '')] || String(row[key.key] ?? '')
   const cell = (row: Row, index: number, column: Column) => {
-    const id = row[key.key] ?? '', change = (next: string) => set(index, { ...row, [column.key]: next })
-    if (column === key && (savedKeys.has(id) || (!choose && labels[id]))) {
+    const id = String(row[key.key] ?? ''), change = (next: unknown) => set(index, { ...row, [column.key]: next })
+    if (column === key && column.type === 'text' && (savedKeys.has(id) || (!choose && labels[id]))) {
       return <span key={column.key} className={labels[id] ? 'dt-row-label' : 'dt-row-label dt-mono'} title={id}>{labels[id] ?? id}</span>
     }
-    if (column === key && choose) {
+    if (column === key && column.type === 'text' && choose) {
       return <select key={column.key} className="dt-select" aria-label={choose} required value={id}
         onChange={event => change(event.target.value)}>
         <option value="" disabled>{choose}</option>
         {choices(id).map(([option, name]) => <option key={option} value={option}>{name}</option>)}
       </select>
     }
+    if (column !== key && column.type === 'text' && column.choose && Object.keys(labels).length) {
+      // Unlike the key column, the same chat may be chosen by several rows, so every label stays offered.
+      const current = String(row[column.key] ?? '')
+      return <select key={column.key} className="dt-select" aria-label={localized(t, column.choose)} value={current}
+        onChange={event => change(event.target.value)}>
+        <option value="">{localized(t, column.choose)}</option>
+        {current && !labels[current] ? <option value={current}>{current}</option> : null}
+        {Object.entries(labels).sort(byName).map(([option, name]) => <option key={option} value={option}>{name}</option>)}
+      </select>
+    }
     if (column.type === 'select') {
-      return <select key={column.key} className="dt-select" aria-label={localized(t, column.label)} value={row[column.key] ?? ''}
+      return <select key={column.key} className="dt-select" aria-label={localized(t, column.label)} value={String(row[column.key] ?? '')}
         onChange={event => change(event.target.value)}>
         {column.options.map(option => <option key={option.value} value={option.value}>{localized(t, option.label)}</option>)}
       </select>
     }
-    return <Input key={column.key} className={column.optional ? undefined : 'dt-mono'} aria-label={localized(t, column.label)}
-      placeholder={localized(t, column.label)}
-      required={!column.optional} pattern={column.pattern} spellCheck={false} value={row[column.key] ?? ''}
+    if (column.type === 'switch') {
+      return <Switch key={column.key} checked={row[column.key] === true} label={localized(t, column.label)}
+        onChange={next => change(next)} />
+    }
+    if (column.type === 'time') {
+      return <Input key={column.key} type="time" aria-label={localized(t, column.label)} required value={String(row[column.key] ?? '')}
         onChange={event => change(event.target.value)} />
+    }
+    if (column.type === 'schedule') {
+      return <ScheduleInput key={column.key} value={row[column.key]} onChange={change} />
+    }
+    if (column.type === 'textarea') {
+      return <textarea key={column.key} className="dt-textarea dt-rows-textarea" rows={2} aria-label={localized(t, column.label)}
+        placeholder={localized(t, column.label)} required={!column.optional} maxLength={column.maxLength}
+        value={String(row[column.key] ?? '')} onChange={event => change(event.target.value)} />
+    }
+    return <Input key={column.key} className={column.optional ? undefined : 'dt-mono'} aria-label={localized(t, column.label)}
+      placeholder={localized(t, column.label)} maxLength={column.type === 'text' ? column.maxLength : undefined}
+      required={!column.optional} pattern={column.type === 'text' ? column.pattern : undefined} spellCheck={false}
+      value={String(row[column.key] ?? '')}
+      onChange={event => change(event.target.value)} />
   }
   return <div className="dt-field">
     <div className="dt-subhead">
@@ -326,8 +404,8 @@ function RowsField({ field, value, saved, onChange, labels, refreshLabels }: {
     {(rows.length <= ROWS_SHOWN || open) && <ul className="dt-rows"
       style={{ ['--dt-columns' as string]: field.columns.length }}>{rows.map((row, index) => <li key={index} className="dt-rows-item">
       {field.columns.map(column => cell(row, index, column))}
-      <Button variant="ghost" size="sm" icon={<Icon name="trash" />} aria-label={t('removeRow', { name: labels[row[key.key] ?? '']
-        || row[key.key] || label })}
+      <Button variant="ghost" size="sm" icon={<Icon name="trash" />} aria-label={t('removeRow', { name: labels[String(row[key.key] ?? '')]
+        || String(row[key.key] ?? '') || label })}
         onClick={() => onChange(rows.filter((_, position) => position !== index))} />
     </li>)}</ul>}
   </div>
@@ -348,6 +426,9 @@ export function SourceField({ field, value, saved, fact, onChange, labels, refre
     case 'number': return <Field label={label} hint={hint}>
       <Input type="number" min={field.min} max={field.max} required value={String(value ?? '')}
         onChange={event => onChange(event.target.value === '' ? '' : Number(event.target.value))} />
+    </Field>
+    case 'time': return <Field label={label} hint={hint}>
+      <Input type="time" required value={String(value ?? '')} onChange={event => onChange(event.target.value)} />
     </Field>
     case 'text': return <Field label={label} hint={hint} note={localized(t, fact)}>
       {field.choose && Object.keys(labels).length

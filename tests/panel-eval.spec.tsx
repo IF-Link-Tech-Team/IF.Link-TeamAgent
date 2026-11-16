@@ -34,7 +34,7 @@ it('keeps a Policy draft across remounts, and merges another save into it sender
   await mount()
   await click(zh['tab.eval'])
   await click(find(zh['tab.settings'], '.dt-status-head button'))
-  expect(all('.dt-subtab').map(tab => tab.textContent)).toEqual(['飞书', 'GitHub'])
+  expect(all('.dt-subtab').map(tab => tab.textContent)).toEqual(['飞书', 'GitHub', '定时与心跳'])
   await addUser()
   expect(text()).toContain(zh.draftKept)
   await remount()
@@ -211,4 +211,33 @@ it('shows the GitHub Source\'s switches for what it receives across the reposito
   // CI has no sender: its one cell is that of a message off the list that does not mention the agent.
   expect(field('Default branch CI · Not on the list · no mention')).toBeTruthy()
   expect(all('.dt-admission thead th').map(cell => cell.textContent)).toContain(en.admissionAddressed)
+})
+
+it('sets the social reaction mode and its pace on the Policy settings', async () => {
+  await mount()
+  await click(zh['tab.eval'])
+  await click(find(zh['tab.settings'], '.dt-status-head button'))
+  await click(zh['gestureMode.auto'])
+  await type(field<HTMLInputElement>(zh.gesturePersonMinutes), '15')
+  await type(field<HTMLInputElement>(zh.gesturePerHour), '3')
+  await click(zh.save)
+  expect(server.settings.policy.gestures).toEqual({ mode: 'auto', personMinutes: 15, perHour: 3 })
+})
+
+it('edits the emoji picker without ever reading the token back', async () => {
+  await mount()
+  await click(zh['tab.eval'])
+  await click(find(zh['tab.settings'], '.dt-status-head button'))
+  const token = field<HTMLInputElement>(zh.marksToken)
+  expect(token.type).toBe('password')
+  expect(token.value).toBe('')
+  await type(field<HTMLInputElement>(zh.marksAccount), 'acct')
+  await type(token, 'secret-token')
+  await click(zh.save)
+  expect(server.settings.marks).toMatchObject({ account: 'acct', token: 'secret-token' })
+  // The next read carries only the mask, and changing another field keeps the stored secret.
+  expect(field<HTMLInputElement>(zh.marksToken).value).toBe('••••••')
+  await type(field<HTMLInputElement>(zh.marksTimeout), '3000')
+  await click(zh.save)
+  expect(server.settings.marks).toMatchObject({ token: 'secret-token', timeoutMs: 3000 })
 })

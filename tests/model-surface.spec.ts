@@ -38,7 +38,8 @@ interface Skill { name: string; description: string; content: string }
  * Lower this limit when shrinking model-facing text; raise it only intentionally and explain why in the commit message.
  */
 // A social-reaction route adds one item kind and two fields to orchestrator_route, which is worth a few hundred characters.
-const BUDGET: Record<Role, number> = { orchestrator: 59_500, worker: 40_500 }
+// Task routing adds type, difficulty and needs to the same item, and a generated routing section; the budget covers both.
+const BUDGET: Record<Role, number> = { orchestrator: 61_000, worker: 40_500 }
 const PROMPTS = 'prompts/, skills/', TOOLS = 'src/app/tools/', SESSIONS = 'src/app/sessions.ts'
 const NOTICES = 'src/app/notices.ts', LINKS = 'src/app/links.ts', ASSESSMENT = 'src/app/assessment.ts'
 const EXECUTOR = 'src/executor/dsh.ts', ERRORS = 'src/core/errors.ts'

@@ -172,6 +172,24 @@ function PolicyBlock() {
           onRemove={() => edit({ rules: policy.rules.filter((_, position) => position !== index) })} />)}</ul>
             : <Hint>{t('rulesEmpty')}</Hint>}
       </Section>
+      <Section title={t('gestures')} hint={t('gesturesHint')}>
+        <Field label={t('gestures')} hint={t('gesturesModeHint')}>
+          <SegmentedControl className="dt-segmented" label={t('gestures')} value={policy.gestures.mode}
+            onChange={mode => edit({ gestures: { ...policy.gestures, mode } })}
+            options={(['off', 'observe', 'auto'] as const).map(mode => ({ value: mode, label: valueLabel(t, 'gestureMode', mode),
+              title: t(`gesturesModeHint`) }))} />
+        </Field>
+        <Field label={t('gesturePersonMinutes')} hint={t('gesturePersonMinutesHint')}>
+          <Input type="number" min={1} max={1440} required value={String(policy.gestures.personMinutes)}
+            onChange={event => edit({ gestures: { ...policy.gestures,
+              personMinutes: event.target.value === '' ? 0 : Number(event.target.value) } })} />
+        </Field>
+        <Field label={t('gesturePerHour')} hint={t('gesturePerHourHint')}>
+          <Input type="number" min={1} max={60} required value={String(policy.gestures.perHour)}
+            onChange={event => edit({ gestures: { ...policy.gestures,
+              perHour: event.target.value === '' ? 0 : Number(event.target.value) } })} />
+        </Field>
+      </Section>
       {current && <Section title={t('policyPerSource')} hint={t('policyPerSourceHint')}>
         {parts.length > 1 && <div className="dt-subtabs" role="tablist" aria-label={t('policyPerSource')}>
           {parts.map(source => <button key={source.id} type="button" role="tab" aria-selected={source === current} className="dt-subtab"
@@ -222,10 +240,43 @@ function EvalBlock() {
   </form>
 }
 
+function MarksBlock() {
+  const { t } = usePanel()
+  const block = useSettings().settings.blocks.marks
+  const saved = { ...block.value, timeoutMs: String(block.value.timeoutMs) }
+  const draft = useBlockDraft('marks', saved, block.revision, value => ({ ...value, timeoutMs: numberOf(value.timeoutMs) }))
+  const value = draft.value
+  const edit = (next: Partial<typeof value>) => draft.edit({ ...value, ...next })
+  return <form className="dt-form dt-block" onSubmit={event => { void draft.submit(event) }}>
+    <Fields disabled={draft.busy}>
+      <h2 className="dt-block-title">{t('marks')}<InfoTip text={t('marksHint')} /></h2>
+      <div className="dt-switch-row">
+        <div className="dt-field-head">{t('marksEnabled')}</div>
+        <Switch checked={value.enabled} onChange={enabled => edit({ enabled })} label={t('marksEnabled')} />
+      </div>
+      <Field label={t('marksAccount')}>
+        <Input className="dt-mono" spellCheck={false} value={value.account} onChange={event => edit({ account: event.target.value })} />
+      </Field>
+      <Field label={t('marksToken')} hint={t('marksTokenHint')}>
+        <Input type="password" autoComplete="new-password" spellCheck={false} value={value.token}
+          onChange={event => edit({ token: event.target.value })} />
+      </Field>
+      <Field label={t('marksModel')}>
+        <Input className="dt-mono" spellCheck={false} value={value.model} onChange={event => edit({ model: event.target.value })} />
+      </Field>
+      <Field label={t('marksTimeout')} hint={t('marksTimeoutHint')}>
+        <Input type="number" min={500} max={15000} required value={value.timeoutMs}
+          onChange={event => edit({ timeoutMs: event.target.value })} />
+      </Field>
+    </Fields>
+    <SaveBar {...draft} onDiscard={draft.discard} />
+  </form>
+}
 export function EvalSettings({ version }: { version?: string | undefined }) {
   return <div className="dt-form">
     <PolicyBlock />
     <EvalBlock />
-    <ConfigHistory blocks={['policy', 'eval']} versions {...version ? { focus: version } : {}} />
+    <MarksBlock />
+    <ConfigHistory blocks={['policy', 'eval', 'marks']} versions {...version ? { focus: version } : {}} />
   </div>
 }

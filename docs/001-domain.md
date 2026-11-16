@@ -67,7 +67,7 @@ The concepts above and their rules are reusable. The Source implementations, the
 | --- | --- |
 | Source | Feishu: live events, history recovery, polling of subscribed topics. GitHub: notifications, subscribed Issues and pull requests, CI changes, pull requests merged or closed, and, where switched on, every new Issue, pull request and comment in the repository and the default branch's CI |
 | Policy | Assessment rules, and each Source's allowed list, its sync, its bot list and its admission table |
-| Executor | A DSH Executor Session and a directory per Ticket, in an execution environment whose variables the Executor and the Sources register |
+| Executor | A worker session (DSH or an external ACP runtime) and a directory per Ticket, in an execution environment whose variables the Executor and the Sources register |
 | Channel | Feishu topic replies, GitHub comments and review thread replies |
 
 ## Glossary
@@ -78,7 +78,7 @@ A reference list of the terms this and the later documents use, with their Chine
 | --- | --- | --- |
 | Agent | 智能体 | The automated team member dsh-superagent runs, acting on Sources through identities such as a GitHub account and a Feishu bot |
 | Main Session | 主 Session | The DSH Session that evaluates Triggers, accepts and dispatches Tickets, and replies; `orchestrator` in code and prompts |
-| Executor Session | 执行器 Session | The DSH Session an Executor runs for one Ticket; `worker` in code and prompts |
+| Executor Session | 执行器 Session | The worker session an Executor runs for one Ticket: a DSH Session or an external ACP session; `worker` in code and prompts |
 | Source | 来源 | A stream of events: a kind that a plugin provides, plus one instance configuration |
 | Trigger | 触发 | One immutable event from a Source |
 | Thread | 线程 | Triggers in time order; the unit within which Evals run one at a time |

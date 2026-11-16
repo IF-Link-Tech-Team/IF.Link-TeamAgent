@@ -23,7 +23,7 @@ const SkillNameSchema = z.string().regex(SKILL_NAME).refine(name => !(Object.key
 /** The built-in parts a team may override, by key: both roles' parts, the Source skills, and the generated parts' templates. */
 const PART_KEYS = ['runtime/shared', 'runtime/orchestrator', 'runtime/worker', 'runtime/subscriptions', 'runtime/replies',
   'runtime/dispatch', 'runtime/work', 'runtime/admission', 'runtime/handoff/orchestrator', 'runtime/handoff/worker', 'runtime/environment',
-  'runtime/policy', 'runtime/policy/none', 'skill/feishu', 'skill/github'] as const
+  'runtime/routing', 'runtime/policy', 'runtime/policy/none', 'skill/feishu', 'skill/github'] as const
 export type PartKey = typeof PART_KEYS[number]
 /** A team's text for a built-in part, and `base`, the key of the built-in text it was edited from. */
 const OverrideSchema = z.object({ text: z.string(),
@@ -62,6 +62,8 @@ export const builtInParts = (): Readonly<Record<PartKey, BuiltInPart>> => parts 
   'runtime/handoff/orchestrator': { roles: MAIN, text: handoffPolicy('orchestrator') },
   'runtime/handoff/worker': { roles: WORKER, text: handoffPolicy('worker') },
   'runtime/environment': { roles: BOTH, text: `${ENVIRONMENT_HEADING}\n{variables}`, placeholders: ['{variables}'] },
+  'runtime/routing': { roles: MAIN, text: '## routing\nWhen you accept, set `type` to one of these types and `difficulty` to S, M or L by its rubric; omit both when unsure, and the host uses the default. Do not name a model.\n{types}',
+    placeholders: ['{types}'] },
   'runtime/policy': { roles: MAIN, text: `${POLICY_HEAD} The enabled rules, by name and id:\n{rules}`, placeholders: ['{version}', '{mode}', '{rules}'] },
   'runtime/policy/none': { roles: MAIN, text: `${POLICY_HEAD} No rule is enabled: a proactive candidate can only be ignored.`,
     placeholders: ['{version}', '{mode}'] },
@@ -96,10 +98,22 @@ export function policySection(settings: Settings, config: PromptConfig = default
   return { key: part, text: fill(builtIn(config, part), { version: policyVersion(settings), mode: settings.eval.mode, rules: rules.join('\n') }) }
 }
 /**
- * Assemble a role's system prompt sections in order from fixed templates, team sections, the generated execution environment
- * and, last, the main Session's generated Policy section, which nothing follows, and whose change leaves the rest unchanged.
+ * The main Session's routing section: the task types and their S/M/L rubrics, generated from settings so a table change
+ * reaches the Router on its next request. It names no model, price or runtime.
  */
-export function promptParts(config: PromptConfig, role: Role, environment?: string, policy?: { key: string; text: string }) {
+export function routingSection(settings: Settings, config: PromptConfig = defaultPrompts()): { key: string; text: string } {
+  if (!settings.dispatch.enabled) return { key: 'runtime/routing', text: '## routing\nTask routing is off; omit `type` and `difficulty` when accepting. The host keeps the ticket on the DSH worker.' }
+  const line = (text: string) => text.replace(/\s*\n\s*/g, ' ')
+  const types = settings.dispatch.types.map(type => `- ${type.id} (${line(type.name)}): ${line(type.description)} S: ${line(type.rubric.S)}; M: ${line(type.rubric.M)}; L: ${line(type.rubric.L)}`)
+  return { key: 'runtime/routing', text: fill(builtIn(config, 'runtime/routing'),
+    { types: types.length ? types.join('\n') : 'No task type is configured; omit type and difficulty.' }) }
+}
+/**
+ * Assemble a role's system prompt sections in order from fixed templates, team sections, the generated execution environment
+ * and the main Session's generated routing and Policy sections, which come last so a change to their data leaves the rest unchanged.
+ */
+export function promptParts(config: PromptConfig, role: Role, environment?: string, policy?: { key: string; text: string },
+  routing?: { key: string; text: string }) {
   // A built-in part names the key its text is overridden by, which for the handoff names the role.
   const fixed = (name: string, part = name) => ({ name, kind: 'fixed' as const, key: part, text: builtIn(config, part as PartKey) })
   const team = (name: TeamSection) => ({ name, kind: 'team' as const, heading: `## ${TEAM_HEADINGS[name]}`,
@@ -111,11 +125,13 @@ export function promptParts(config: PromptConfig, role: Role, environment?: stri
     ...role === 'orchestrator' ? [fixed('runtime/admission')] : [],
     fixed('runtime/handoff', `runtime/handoff/${role}`),
     ...environment ? [{ name: 'runtime/environment', kind: 'generated' as const, key: 'runtime/environment', text: environment }] : [],
+    ...role === 'orchestrator' && routing ? [{ name: 'runtime/routing', kind: 'generated' as const, ...routing }] : [],
     ...role === 'orchestrator' && policy ? [{ name: 'runtime/policy', kind: 'generated' as const, ...policy }] : [],
   ].filter(part => part.text)
 }
-export function composePrompt(config: PromptConfig, role: Role, environment?: string, policy?: { key: string; text: string }): string {
-  return promptParts(config, role, environment, policy).map(part => part.text).join('\n\n')
+export function composePrompt(config: PromptConfig, role: Role, environment?: string, policy?: { key: string; text: string },
+  routing?: { key: string; text: string }): string {
+  return promptParts(config, role, environment, policy, routing).map(part => part.text).join('\n\n')
 }
 export function composeSkill(config: PromptConfig, name: string): string {
   return name === 'feishu' || name === 'github' ? builtIn(config, `skill/${name}`) : config.skills[name] ?? ''
@@ -138,9 +154,12 @@ export class Prompts {
     private readonly feishu: () => boolean) {
     this.versions = new Versions(store, KV.prompts.revision, KV.prompts.version)
   }
-  /** A role's prompt; the main Session's Policy section follows the settings as they are now, at each model request. */
+  /** A role's prompt; the main Session's routing and Policy sections follow the settings as they are now, at each model request. */
   compose(config: PromptConfig, role: Role, variables = this.environment()): string {
-    return composePrompt(config, role, environmentSection(config, variables), role === 'orchestrator' ? policySection(this.store.settings(), config) : undefined)
+    const settings = this.store.settings()
+    const policy = role === 'orchestrator' ? policySection(settings, config) : undefined
+    const routing = role === 'orchestrator' ? routingSection(settings, config) : undefined
+    return composePrompt(config, role, environmentSection(config, variables), policy, routing)
   }
   /** Returns skills to register in every Session: built-in Source skills (`feishu` only when a Feishu bot is configured) followed by team skills. */
   skills(config: PromptConfig): [string, string][] {
@@ -194,9 +213,11 @@ export class Prompts {
   }
   preview(value: unknown) {
     const config = this.validate(value)
-    const environment = environmentSection(config, this.environment()), policy = policySection(this.store.settings(), config)
-    return { orchestrator: composePrompt(config, 'orchestrator', environment, policy), worker: composePrompt(config, 'worker', environment),
-      parts: { orchestrator: promptParts(config, 'orchestrator', environment, policy), worker: promptParts(config, 'worker', environment) },
+    const settings = this.store.settings()
+    const environment = environmentSection(config, this.environment()), policy = policySection(settings, config),
+      routing = routingSection(settings, config)
+    return { orchestrator: composePrompt(config, 'orchestrator', environment, policy, routing), worker: composePrompt(config, 'worker', environment),
+      parts: { orchestrator: promptParts(config, 'orchestrator', environment, policy, routing), worker: promptParts(config, 'worker', environment) },
       skills: Object.fromEntries(this.skills(config)), scope: 'Team sections, skills, and overrides of built-in parts, which follow their built-in text until overridden. Workers additionally inherit the host prompt and repository AGENTS.md. Prompt text changes what the agents are told, not what dsh-superagent allows: tool permissions, the gate and account wrappers stay.' }
   }
   save(value: unknown, baseRevision: number, source: SettingsOrigin): PromptVersion {

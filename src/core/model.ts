@@ -240,6 +240,12 @@ export interface Assignment {
    * into a step before, the worker read.
    */
   idleAt?: string
+  /** The runtime, family and model this Assignment actually started on, and its usage when the runtime reports it. */
+  family?: string
+  runtime?: string
+  model?: string
+  usage?: { inputTokens?: number; outputTokens?: number; cost?: number; currency?: string }
+  turns?: number
 }
 
 export type TicketInput =
@@ -327,7 +333,25 @@ export interface Ticket {
  * Thread closed; the ticket then ends unless its work has not finished (see `Tickets.unfinished`).
  */
 export interface Follow { thread: string; own: boolean; closed?: { at: string; outcome: 'merged' | 'closed' } }
-export interface Execution { name: string; directory: string; assignment: string }
+export interface Execution {
+  name: string
+  directory: string
+  assignment: string
+  /** Task type and difficulty chosen at accept time, kept for the panel and for a later re-route. */
+  type?: string
+  difficulty?: 'S' | 'M' | 'L'
+  /** The vendor family and the exact model the ticket runs on; `runtime` is the harness that hosts it. */
+  family?: string
+  runtime?: string
+  routeId?: string
+  model?: string
+  /** The runtime's own session id, used to resume it after a restart. */
+  nativeSessionId?: string
+  /** A path relative to the ticket directory holding the runtime's NDJSON transcript. */
+  transcript?: string
+  /** A short handoff note written when a ticket changes runtime. */
+  handoff?: string
+}
 
 /** Whether a ticket is open: it has not ended. */
 export const liveTicket = (ticket: Pick<Ticket, 'ended'>): boolean => !ticket.ended

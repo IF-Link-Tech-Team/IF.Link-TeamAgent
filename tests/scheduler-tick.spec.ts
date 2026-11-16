@@ -37,6 +37,19 @@ function host(overrides: Partial<SchedulerHost> = {}, options: { config?: unknow
 
 const daily = { id: 'daily-digest', title: '盘点', schedule: { kind: 'daily', at: '09:30' }, text: '盘点在办工单', chatId: 'oc_1', enabled: true }
 
+describe('tickScheduler: heartbeat pacing', () => {
+  const heartbeat = { enabled: true, chatId: 'oc_1', activeHours: { start: '00:00', end: '23:59' }, throttleMinutes: 1, silenceMinutes: 60 }
+  it('reads the pacing from the saved configuration instead of constants', async () => {
+    const loud = host({}, { config: { heartbeat } })
+    loud.store.set('scheduler-beat', { at: NOW - 2 * HOUR, stamp: '', reason: 'roll-call', humanTriggers: 0 })
+    expect(await tickScheduler(loud.ctx, NOW)).toEqual(['心跳 roll-call: 无内容，未调用模型'])
+    // The same silence inside a longer configured window is not a roll call yet.
+    const quiet = host({}, { config: { heartbeat: { ...heartbeat, silenceMinutes: 600 } } })
+    quiet.store.set('scheduler-beat', { at: NOW - 2 * HOUR, stamp: '', reason: 'roll-call', humanTriggers: 0 })
+    expect(await tickScheduler(quiet.ctx, NOW)).toEqual([])
+  })
+})
+
 describe('tickScheduler: jobs', () => {
   it('fires a due job once, and reports the next occurrence on later ticks', async () => {
     const h = host({}, { config: { jobs: [daily] } })

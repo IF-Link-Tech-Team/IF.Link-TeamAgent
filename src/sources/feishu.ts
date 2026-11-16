@@ -1,8 +1,8 @@
 /** Feishu source kind definition, policy synchronization, and Cordis plugin entry. */
 import type { Context } from '@deepseek-ai/cordis'
 import { z } from 'zod'
-import { FeishuBotSchema } from '../deployment.ts'
 import { feishuLink, reactFeishu, sendFeishu } from './feishu-channel.ts'
+import { FeishuConfigSchema, feishuTiming, type FeishuConfig } from './feishu-config.ts'
 import { feishuThreadContext } from './feishu-read.ts'
 import { refreshChatNames, runFeishu } from './feishu-loops.ts'
 import { SOURCE, feishuTriggerId } from './feishu-trigger.ts'
@@ -13,21 +13,12 @@ import type { SourceRegistry } from './registry.ts'
 export { SOURCE, feishuRef, feishuThreadId, feishuTime, feishuTrigger, feishuTriggerId, historyEvent, withMentionNames }
   from './feishu-trigger.ts'
 export type { FeishuEvent } from './feishu-trigger.ts'
+export { FeishuConfigSchema, feishuTiming, type FeishuConfig, type FeishuTiming } from './feishu-config.ts'
 export { backfillChat, consumerRetry, pollThreads, refreshChatNames, threadRef } from './feishu-loops.ts'
 const MembersSchema = z.looseObject({
   users: z.array(z.looseObject({ member_id: z.string(), name: z.string() })),
   has_more: z.boolean(), truncations: z.array(z.unknown()).optional(),
 })
-const FeishuConfigSchema = FeishuBotSchema.extend({
-  readPageSize: z.number().int().min(1).max(50).default(50),
-  linkTimeoutMs: z.number().int().min(1).max(90000).default(5000),
-  chats: z.array(z.object({ chatId: z.string().regex(/^oc_[a-zA-Z0-9]+$/), name: z.string().trim().max(60).optional(), listen: z.enum(['mentions', 'all']) }).strict())
-    .refine(chats => new Set(chats.map(chat => chat.chatId)).size === chats.length, 'Duplicate chat IDs')
-    .default([]),
-  directMessages: z.boolean().default(true),
-  otherChats: z.enum(['none', 'mentions']).default('none'),
-}).strict()
-export type FeishuConfig = z.infer<typeof FeishuConfigSchema>
 export const feishuKind: SourceKind<FeishuConfig> = {
   kind: SOURCE,
   refreshLabels: (host, signal) => refreshChatNames(sourceContext(host, feishuKind), signal),
@@ -49,6 +40,29 @@ export const feishuKind: SourceKind<FeishuConfig> = {
     { key: 'readPageSize', type: 'number', advanced: true, min: 1, max: 50, label: { zh: '每页消息数', en: 'Messages per page' }, hint: { zh: '智能体读取线程和群历史时，每页的消息数。', en: 'Messages per page when agents read Threads and chat history.' } },
     { key: 'linkTimeoutMs', type: 'number', advanced: true, min: 1, max: 90000, label: { zh: '原消息链接的查询时限 / 毫秒', en: 'Original message link time limit / ms' },
       hint: { zh: '查询原消息链接最多等待的时间；超时后智能体改为直接读取原消息。', en: 'How long to wait for an original message\'s link; after that, agents read the message itself.' } },
+    // The sweep cadences are the quota knobs: live events deliver almost every message, so these are the safety net.
+    { key: 'chatSweepMinutes', type: 'number', advanced: true, min: 1, max: 10080, label: { zh: '全量补扫群 / 分钟', en: 'Sweep every chat / minutes' },
+      hint: { zh: '每这么久把每个群补扫一遍，找回长连接漏掉的消息。放长最省额度，但漏掉的消息最晚要这么久才发现。',
+        en: 'Every chat is swept this often for what the live stream lost. Longer spends less quota and delays a lost message by as much.' } },
+    { key: 'topicSweepMinutes', type: 'number', advanced: true, min: 1, max: 10080, label: { zh: '全量补扫话题 / 分钟', en: 'Sweep every topic / minutes' },
+      hint: { zh: '每这么久把所有已知话题翻一遍。话题回复只有读话题才看得到，这是线程轮询之外的第二道兜底。',
+        en: 'Every known topic is read this often. Thread replies only exist in topics, so this is the second safety net beside thread polling.' } },
+    { key: 'topicHotMinutes', type: 'number', advanced: true, min: 1, max: 10080, label: { zh: '活跃话题的热窗口 / 分钟', en: 'Hot topic window / minutes' },
+      hint: { zh: '收到事件的话题在这段时间内每轮都补扫，所以刚聊过的地方漏消息最少。', en: 'A topic that received an event is swept every round within this window, so a busy thread recovers fastest.' } },
+    { key: 'topicRecentMinutes', type: 'number', advanced: true, min: 1, max: 10080, label: { zh: '话题补扫的活跃窗口 / 分钟', en: 'Topic activity window / minutes' },
+      hint: { zh: '定期话题补扫只读这段时间内有消息的话题；更老的话题留给长连接和话题轮询。',
+        en: 'The periodic topic pass reads only topics that saw a message within this window; older ones are left to the live stream.' } },
+    { key: 'catchUpForceMinutes', type: 'number', advanced: true, min: 1, max: 10080, label: { zh: '强制全扫的停机阈值 / 分钟', en: 'Catch-up force threshold / minutes' },
+      hint: { zh: '停机时间超过这个值，重连后强制读所有话题；短时间重启只读最近活跃的。', en: 'After being down this long, the reconnect reads every topic; a short restart reads only recent activity.' } },
+    { key: 'threadPollMinutes', type: 'number', advanced: true, min: 1, max: 10080, label: { zh: '订阅线程轮询间隔 / 分钟', en: 'Subscribed thread poll / minutes' },
+      hint: { zh: '工单订阅的线程最久多久读一次。线程回复是额度大头，放长能省很多，代价是回复最晚这么久才进来。',
+        en: 'How often a thread a Ticket follows is read. Thread replies dominate the quota; longer saves a lot and delays a reply by as much.' } },
+    { key: 'threadRecentMinutes', type: 'number', advanced: true, min: 1, max: 10080, label: { zh: '线程活跃窗口 / 分钟', en: 'Thread activity window / minutes' },
+      hint: { zh: '没有在办工单的线程，只在这段时间内有过消息时才继续轮询。', en: 'A thread no live Ticket follows is polled only while it saw a message within this window.' } },
+    { key: 'chatNamesMinutes', type: 'number', advanced: true, min: 1, max: 10080, label: { zh: '刷新群名间隔 / 分钟', en: 'Chat names refresh / minutes' },
+      hint: { zh: '群名只是面板上的显示；机器人刚加入的群最多这么久后出现在选择列表里。', en: 'Chat names label the panel only; a chat the bot just joined shows up in the picker within this time.' } },
+    { key: 'historyFailureRounds', type: 'number', advanced: true, min: 1, max: 10, label: { zh: '连续失败几轮报异常', en: 'Failed rounds before an error' },
+      hint: { zh: '单个群连续失败这么多轮才把“飞书补收”标红，单轮抖动只记一次重试。', en: 'A chat must fail this many rounds in a row before recovery turns red; one flaky round just retries.' } },
   ],
   health: ['feishu', 'history'],
   scope({ meta }, config) {

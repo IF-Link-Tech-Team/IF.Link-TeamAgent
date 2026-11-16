@@ -46,7 +46,10 @@ it('answers each kind of failure with its own status', async () => {
   // Block names are validated before calling settings.save: reject unknown blocks or non-existent Sources.
   expect(await call('PUT', 'settings/pause', { value: {}, revision: 0 })).toMatchObject({ status: 400 })
   expect(await call('PUT', 'settings/source:feishu', { value: {}, revision: 0 })).toEqual({ status: 404, body: { error: 'Source not found' } })
-  expect(saves).toHaveLength(4)
+  // The routing and marks blocks the panel edits are accepted by the same route.
+  expect((await call('PUT', 'settings/routing', { value: { cooldownSeconds: 120, probeSeconds: 30 }, revision: 0 })).status).toBe(200)
+  expect((await call('PUT', 'settings/marks', { value: { token: '••••••' }, revision: 0 })).status).toBe(200)
+  expect(saves).toHaveLength(6)
   expect(await call('POST', 'tickets/t9/retry')).toEqual({ status: 404, body: { error: 'Ticket not found' } })
   expect(await call('GET', 'nothing/here')).toEqual({ status: 404, body: { error: 'Unknown operation' } })
   expect(await call('POST', 'executor/pause', 'not json')).toEqual({ status: 400, body: { error: 'The request body is not JSON' } })

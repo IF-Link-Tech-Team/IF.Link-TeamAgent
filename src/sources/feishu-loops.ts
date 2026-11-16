@@ -13,10 +13,8 @@ import { feishuRef, feishuTime, feishuTrigger, HistoricalMessageSchema, historyE
 import { health, type Health, type SourceContext } from './host.ts'
 import { KV } from '../kv.ts'
 import { cursorAt, POLL_HORIZON_MS, polled, pollThreads as pollEach } from './poll.ts'
-import type { FeishuConfig } from './feishu.ts'
+import { feishuTiming, type FeishuConfig, type FeishuTiming } from './feishu-config.ts'
 
-/** Rounds (one per minute) a single chat must fail in a row before `history` turns red. */
-const HISTORY_FAILURE_ROUNDS = 3
 /**
  * How often the loop wakes up. A round now costs a call or two: the hourly and two-hourly sweeps, not the rounds,
  * are what read Feishu, so the cadence is cheap and a chat that just received an event is swept within a minute.
@@ -24,41 +22,12 @@ const HISTORY_FAILURE_ROUNDS = 3
 const ROUND_MS = 60_000
 /** A chat that received an event is swept once, this long afterwards, so an event the stream lost still lands quickly. */
 const FAST_SWEEP_DELAY_MS = 30_000
-const minutes = (value: number): number => value * 60_000
 /**
- * Reads a cadence in minutes from the environment, so an operator can retune a sweep without a rebuild. Both the
- * environment value and the fallback are minutes; the callers compare the result against millisecond timestamps.
+ * The default cadences of the background sweeps, from the Source schema's defaults (which an environment variable may
+ * seed). Each round builds the effective ones from the saved configuration instead, so a change in the panel applies
+ * without a restart; this constant stays for callers that have no configuration at hand.
  */
-const envMinutes = (name: string, fallback: number): number => {
-  const value = Number(process.env[name])
-  return minutes(Number.isFinite(value) && value > 0 ? value : fallback)
-}
-/**
- * Cadences of the background sweeps. Live events deliver almost every message (99% of the human ones, measured over a
- * week), so the sweeps are a safety net and may be slow: they only have to catch what the stream lost, plus the app
- * messages Feishu does not push.
- */
-export const FEISHU_TIMING = {
-  /** Every chat is swept this often for messages the stream lost. */
-  chatSweep: envMinutes('DSH_FEISHU_CHAT_SWEEP_MINUTES', 60),
-  /** A topic that received an event recently is swept on every round. */
-  topicHot: envMinutes('DSH_FEISHU_TOPIC_HOT_MINUTES', 30),
-  /** Every topic that saw a message this recently is swept by the topic pass; older ones are left to the live stream. */
-  topicRecent: envMinutes('DSH_FEISHU_TOPIC_RECENT_MINUTES', 720),
-  /** Every topic is swept this often, hot or not. */
-  topicSweep: envMinutes('DSH_FEISHU_TOPIC_SWEEP_MINUTES', 120),
-  /**
-   * How long the process must have been down before a catch-up forces every topic, rather than reading only the ones
-   * that saw a message recently. A short restart cannot lose enough thread replies to justify the full pass.
-   */
-  catchUpForce: envMinutes('DSH_FEISHU_CATCH_UP_FORCE_MINUTES', 30),
-  /** A subscribed thread is polled at most this often. */
-  threadPoll: envMinutes('DSH_FEISHU_THREAD_POLL_MINUTES', 10),
-  /** A thread whose last activity is older than this is left to the ticket-driven poll. */
-  threadRecent: envMinutes('DSH_FEISHU_THREAD_RECENT_MINUTES', 60),
-  /** The joined-chat list is a display aid, not a message path. */
-  chatNames: envMinutes('DSH_FEISHU_CHAT_NAMES_MINUTES', 60),
-}
+export const FEISHU_TIMING: FeishuTiming = feishuTiming()
 
 /**
  * Markers of recent live events, kept in memory: a restart starts cold on purpose, because the first round (and every
@@ -109,22 +78,23 @@ export function feishuCache(): FeishuCache {
 }
 
 /**
- * Returns an error health once one chat has failed `HISTORY_FAILURE_ROUNDS` rounds in a row, or undefined so a single
+ * Returns an error health once one chat has failed `rounds` (default 3) rounds in a row, or undefined so a single
  * flaky round (Feishu occasionally answers 2200 for one chat and recovers by itself) keeps `history` green.
  */
-export function historyFailureHealth(failures: ReadonlyMap<string, number>, errors: readonly string[]): Health | undefined {
-  const rounds = Math.max(0, ...failures.values())
-  return rounds >= HISTORY_FAILURE_ROUNDS
-    ? health('error', 'pollFailures', { count: String(rounds), error: errors.join(' / ') })
+export function historyFailureHealth(failures: ReadonlyMap<string, number>, errors: readonly string[], rounds = 3): Health | undefined {
+  const count = Math.max(0, ...failures.values())
+  return count >= rounds
+    ? health('error', 'pollFailures', { count: String(count), error: errors.join(' / ') })
     : undefined
 }
 
 export const runFeishu = (ctx: SourceContext, signal: AbortSignal): Promise<unknown> => {
-  // Log the cadences this process actually resolved: an environment variable that never reached the service (started
-  // outside the unit, or a tmux server whose environment is older) is otherwise only visible as a puzzling round size.
+  // Log the cadences this process starts with. Every round re-reads the saved configuration, so this line is the
+  // starting point rather than a promise; without it a surprising round size is only visible after the fact.
+  const timing = feishuTiming(enabled(ctx))
   const minutes = (value: number): string => `${Math.round(value / 60_000)}m`
-  console.log(`[feishu] cadence: chat ${minutes(FEISHU_TIMING.chatSweep)}, topic ${minutes(FEISHU_TIMING.topicSweep)}, `
-    + `thread ${minutes(FEISHU_TIMING.threadPoll)}, hot ${minutes(FEISHU_TIMING.topicHot)}, catch-up force ${minutes(FEISHU_TIMING.catchUpForce)}`)
+  console.log(`[feishu] cadence: chat ${minutes(timing.chatSweep)}, topic ${minutes(timing.topicSweep)}, `
+    + `thread ${minutes(timing.threadPoll)}, hot ${minutes(timing.topicHot)}, catch-up force ${minutes(timing.catchUpForce)}`)
   return Promise.allSettled([watch, backfillLoop, chatNamesLoop].map(loop => loop(ctx, signal)))
 }
 const enabled = (ctx: SourceContext): FeishuConfig | undefined => ctx.config<FeishuConfig>(SOURCE)
@@ -230,16 +200,17 @@ export async function refreshChatNames(ctx: SourceContext, signal?: AbortSignal)
   ctx.state.set(KV.sources.labels(SOURCE), names)
   return names
 }
-/** Rereads the chat list hourly: its names label chats in the panel, and a new chat shows up within that hour. */
+/** Rereads the chat list on its configured cadence: its names label chats in the panel, and a new chat shows up within it. */
 async function chatNamesLoop(ctx: SourceContext, signal: AbortSignal): Promise<void> {
   await ctx.ready
   if (!available(ctx)) return
   while (!signal.aborted) {
-    if (enabled(ctx)) {
+    const config = enabled(ctx)
+    if (config) {
       try { await refreshChatNames(ctx, signal) }
       catch { /* Names are a display aid; the stored list stays until a later read succeeds. */ }
     }
-    await delay(FEISHU_TIMING.chatNames, undefined, { signal }).catch(() => {})
+    await delay(feishuTiming(config).chatNames, undefined, { signal }).catch(() => {})
   }
 }
 
@@ -250,8 +221,8 @@ function sweepableChats(ctx: SourceContext, config: FeishuConfig): Record<string
   return { ...Object.fromEntries(config.chats.map(chat => [chat.chatId, false])), ...Object.fromEntries(known) }
 }
 /** Forgets markers older than the longest window they still influence, so a long-running process does not accumulate them. */
-function pruneActivity(now: number): void {
-  const stale = now - Math.max(FEISHU_TIMING.topicSweep, FEISHU_TIMING.threadRecent)
+function pruneActivity(now: number, timing: FeishuTiming): void {
+  const stale = now - Math.max(timing.topicSweep, timing.threadRecent)
   for (const markers of [activity.chat, activity.topic, activity.thread]) {
     for (const [key, at] of markers) if (at < stale) markers.delete(key)
   }
@@ -273,7 +244,7 @@ async function backfillLoop(ctx: SourceContext, signal: AbortSignal): Promise<vo
   await ctx.ready
   if (!available(ctx)) { ctx.report('history', health('paused', 'feishuBotMissing')); return }
   // Consecutive failures per chat. Feishu occasionally answers 2200 for a single chat and recovers on its own;
-  // one flaky round must not turn the whole component red, so only a chat failing HISTORY_FAILURE_ROUNDS rounds
+  // one flaky round must not turn the whole component red, so only a chat failing `historyFailureRounds` rounds
   // in a row is reported. Counters live in memory: a restart is a fresh start, and no stale count survives a night.
   const failures = new Map<string, number>()
   let lastChatSweep = 0
@@ -286,17 +257,19 @@ async function backfillLoop(ctx: SourceContext, signal: AbortSignal): Promise<vo
       await delay(ROUND_MS, undefined, { signal }).catch(() => {})
       continue
     }
+    // Cadences are read from this round's configuration, so saving a new value in the panel applies on the next round.
+    const timing = feishuTiming(config)
     const now = Date.now()
     const catchUp = catchUpRequested
     catchUpRequested = false
     // 会话历史只带得出话题的根消息，线程里的回复只有读话题才看得到，所以一次真正的补扫要把每个已知话题都翻一遍。
     // 但重启只停了几十秒时，这一页页翻下去几乎换不回任何消息：按停机时长决定要不要强制，短了就回到常规的活跃过滤。
     const gap = catchUp ? catchUpGap(ctx, now) : 0
-    const force = catchUp && gap >= FEISHU_TIMING.catchUpForce
+    const force = catchUp && gap >= timing.catchUpForce
     if (catchUp) console.log(`[feishu] catch-up after ${Number.isFinite(gap) ? `${Math.round(gap / 1000)}s` : 'an unrecorded gap'}: ${force ? 'every topic' : 'recent topics only'}`)
     const chats = sweepableChats(ctx, config)
-    const chatSweep = catchUp || now - lastChatSweep >= FEISHU_TIMING.chatSweep
-    const topicSweep = catchUp || now - lastTopicSweep >= FEISHU_TIMING.topicSweep
+    const chatSweep = catchUp || now - lastChatSweep >= timing.chatSweep
+    const topicSweep = catchUp || now - lastTopicSweep >= timing.topicSweep
     const cache = feishuCache()
     const errors: string[] = []
     const tally = { skipped: 0 }
@@ -305,21 +278,21 @@ async function backfillLoop(ctx: SourceContext, signal: AbortSignal): Promise<vo
     const targets = chatSweep ? Object.entries(chats) : fastChats(chats, now, swept)
     for (const [chatId, direct] of targets) {
       if (signal.aborted) break
-      await sweepChat(ctx, chatId, direct, signal, tally, failures, errors, mode, cache, force)
+      await sweepChat(ctx, chatId, direct, signal, tally, failures, errors, mode, cache, force, timing)
       swept.set(chatId, now)
     }
     if (chatSweep) { lastChatSweep = now; swept = new Map() }
-    else pruneActivity(now)
+    else pruneActivity(now, timing)
     if (topicSweep) {
       lastTopicSweep = now
-      const window = { since: new Date(now - FEISHU_TIMING.topicSweep).toISOString(), until: new Date(now).toISOString() }
+      const window = { since: new Date(now - timing.topicSweep).toISOString(), until: new Date(now).toISOString() }
       for (const [chatId, direct] of Object.entries(chats)) {
         if (signal.aborted) break
-        try { await sweepChatTopics(ctx, chatId, direct, window.since, window.until, signal, tally, 'all', cache, force) }
+        try { await sweepChatTopics(ctx, chatId, direct, window.since, window.until, signal, tally, 'all', cache, force, timing) }
         catch (error) { if (!signal.aborted) errors.push(`${chatId} topics: ${String(error)}`) }
       }
     }
-    await pollThreads(ctx, signal, tally, cache)
+    await pollThreads(ctx, signal, tally, cache, timing)
     for (const chatId of failures.keys()) if (!(chatId in chats)) failures.delete(chatId)
     const skipped = tally.skipped ? `; ${tally.skipped} unreadable messages skipped` : ''
     const retrying = errors.length ? `; ${errors.length} chat(s) failed this round, retrying` : ''
@@ -328,7 +301,7 @@ async function backfillLoop(ctx: SourceContext, signal: AbortSignal): Promise<vo
     // Every round is accounted, not only a sweep round: the daily record is what quota decisions are read from later.
     const { today } = signal.aborted ? { today: 0 } : noteFeishuCalls(ctx, calls, byCommand, bySite)
     const read = calls ? `; ${calls} API calls this round, ${today} today` : `; ${today} API calls today`
-    if (!signal.aborted) ctx.report('history', historyFailureHealth(failures, errors) ?? {
+    if (!signal.aborted) ctx.report('history', historyFailureHealth(failures, errors, config.historyFailureRounds) ?? {
       state: 'ready', detail: `Configured groups and known direct chats recovered${skipped}${retrying}${read}`, at: new Date().toISOString() })
     await delay(ROUND_MS, undefined, { signal }).catch(() => {})
   }
@@ -378,13 +351,14 @@ export function noteFeishuCalls(ctx: SourceContext, calls: number, byCommand: Re
 
 /** Sweeps one chat between its cursor and now, advancing the cursor only on success so a failed chat is retried. */
 async function sweepChat(ctx: SourceContext, chatId: string, direct: boolean, signal: AbortSignal, tally: Tally,
-  failures: Map<string, number>, errors: string[], topics: TopicMode, cache?: FeishuCache, force = false): Promise<void> {
+  failures: Map<string, number>, errors: string[], topics: TopicMode, cache?: FeishuCache, force = false,
+  timing: FeishuTiming = FEISHU_TIMING): Promise<void> {
   const started = new Date().toISOString()
   const cursorKey = KV.feishu.history(chatId)
   const since = ctx.state.get(cursorKey)
   if (since === undefined) { ctx.state.set(cursorKey, started); return }
   try {
-    await backfillChat(ctx, chatId, direct, since, started, signal, tally, { topics, cache, force })
+    await backfillChat(ctx, chatId, direct, since, started, signal, tally, { topics, cache, force, timing })
     if (!signal.aborted) ctx.state.set(cursorKey, cursorAt(started))
     failures.delete(chatId)
   } catch (error) {
@@ -400,7 +374,7 @@ export type TopicMode = 'all' | 'hot' | 'none'
  * What a sweep reads and shares with the rest of its round; both are optional so the exported functions stay usable alone.
  * `force` reads every topic whatever the recent window says, which is what a reconnect catch-up needs.
  */
-export interface SweepOptions { topics?: TopicMode; cache?: FeishuCache; force?: boolean }
+export interface SweepOptions { topics?: TopicMode; cache?: FeishuCache; force?: boolean; timing?: FeishuTiming }
 
 /**
  * Backfills chat messages and active topic replies between `since` and `until` before the caller advances the chat cursor.
@@ -418,34 +392,37 @@ export async function backfillChat(ctx: SourceContext, chatId: string, direct: b
   }
   ctx.state.set(KV.feishu.topics(chatId), topics)
   const mode = options.topics ?? 'all'
-  if (mode !== 'none') await scanTopics(ctx, chatId, direct, topics, since, until, signal, tally, mode, options.cache, options.force)
+  if (mode !== 'none') await scanTopics(ctx, chatId, direct, topics, since, until, signal, tally, mode, options.cache, options.force,
+    options.timing ?? FEISHU_TIMING)
 }
 /** Reads this chat's topics without reading the chat itself: the cold sweep, and the reconnect catch-up's topic half. */
 export async function sweepChatTopics(ctx: SourceContext, chatId: string, direct: boolean, since: string, until: string,
-  signal: AbortSignal, tally: Tally = { skipped: 0 }, mode: TopicMode = 'all', cache?: FeishuCache, force = false): Promise<void> {
+  signal: AbortSignal, tally: Tally = { skipped: 0 }, mode: TopicMode = 'all', cache?: FeishuCache, force = false,
+  timing: FeishuTiming = FEISHU_TIMING): Promise<void> {
   const topics = { ...ctx.state.get(KV.feishu.topics(chatId)) }
-  await scanTopics(ctx, chatId, direct, topics, since, until, signal, tally, mode, cache, force)
+  await scanTopics(ctx, chatId, direct, topics, since, until, signal, tally, mode, cache, force, timing)
   ctx.state.set(KV.feishu.topics(chatId), topics)
 }
 /**
- * Whether the topic pass still reads a topic: one that saw a message within `topicRecent`, or one whose stored time is
- * unreadable. The decision reads the persisted `lastSeenAt`, not the in-memory activity markers, because a restart
- * empties those and would otherwise skip every topic exactly when the catch-up has the most to recover.
+ * Whether the topic pass still reads a topic: one that saw a message within `timing.topicRecent`, or one whose stored
+ * time is unreadable. The decision reads the persisted `lastSeenAt`, not the in-memory activity markers, because a
+ * restart empties those and would otherwise skip every topic exactly when the catch-up has the most to recover.
  */
-const recentTopic = (seen: string | undefined, now: number): boolean => {
+const recentTopic = (seen: string | undefined, now: number, timing: FeishuTiming): boolean => {
   const at = Date.parse(seen ?? '')
-  return !Number.isFinite(at) || now - at < FEISHU_TIMING.topicRecent
+  return !Number.isFinite(at) || now - at < timing.topicRecent
 }
 /**
- * Reads the chosen topics of one chat; a hot topic is one that received an event within `topicHot`, while the periodic
- * pass reads the topics that saw a message within `topicRecent` unless `force` asks for all of them.
+ * Reads the chosen topics of one chat; a hot topic is one that received an event within `timing.topicHot`, while the
+ * periodic pass reads the topics that saw a message within `timing.topicRecent` unless `force` asks for all of them.
  */
 async function scanTopics(ctx: SourceContext, chatId: string, direct: boolean, topics: Record<string, string>,
-  since: string, until: string, signal: AbortSignal, tally: Tally, mode: TopicMode, cache?: FeishuCache, force = false): Promise<void> {
+  since: string, until: string, signal: AbortSignal, tally: Tally, mode: TopicMode, cache?: FeishuCache, force = false,
+  timing: FeishuTiming = FEISHU_TIMING): Promise<void> {
   const ids = Object.keys(topics)
   const now = Date.now()
-  const chosen = mode === 'hot' ? ids.filter(id => now - (activity.topic.get(id) ?? 0) < FEISHU_TIMING.topicHot)
-    : mode === 'none' ? [] : ids.filter(id => force || recentTopic(topics[id], now))
+  const chosen = mode === 'hot' ? ids.filter(id => now - (activity.topic.get(id) ?? 0) < timing.topicHot)
+    : mode === 'none' ? [] : ids.filter(id => force || recentTopic(topics[id], now, timing))
   for (const id of chosen) {
     if (signal.aborted) return
     await scanContainer(ctx, chatId, direct, 'thread', id, since, until, signal, tally, topics, cache)
@@ -500,23 +477,24 @@ export function threadRef(ctx: SourceContext, thread: Thread): FeishuRef | undef
 }
 /**
  * Whether a subscribed thread is worth reading this round: a thread a live ticket follows is read at most every
- * `threadPoll`, and one nothing follows is only read while it saw activity within `threadRecent`. A thread that is quiet
- * and ticketless keeps its subscription but is left to the reconnect catch-up.
+ * `timing.threadPoll`, and one nothing follows is only read while it saw activity within `timing.threadRecent`. A thread
+ * that is quiet and ticketless keeps its subscription but is left to the reconnect catch-up.
  */
-export function threadDue(ctx: SourceContext, thread: Thread, now = Date.now()): boolean {
-  if (now - (activity.thread.get(thread.key) ?? 0) < FEISHU_TIMING.threadPoll) return false
+export function threadDue(ctx: SourceContext, thread: Thread, now = Date.now(), timing: FeishuTiming = FEISHU_TIMING): boolean {
+  if (now - (activity.thread.get(thread.key) ?? 0) < timing.threadPoll) return false
   const followed = thread.subscriptions.some(id => {
     const ticket = ctx.tickets.get(id)
     return !!ticket && liveTicket(ticket)
   })
   if (followed) return true
-  return now - Date.parse(thread.lastAt ?? thread.createdAt) < FEISHU_TIMING.threadRecent
+  return now - Date.parse(thread.lastAt ?? thread.createdAt) < timing.threadRecent
 }
 /** Polls subscribed Feishu threads that are due, so replies missed by the live stream become triggers for their tickets. */
-export async function pollThreads(ctx: SourceContext, signal?: AbortSignal, tally?: Tally, cache?: FeishuCache): Promise<void> {
+export async function pollThreads(ctx: SourceContext, signal?: AbortSignal, tally?: Tally, cache?: FeishuCache,
+  timing: FeishuTiming = FEISHU_TIMING): Promise<void> {
   const now = Date.now()
   await pollEach(ctx, SOURCE, () => !!signal?.aborted, thread => pollThread(ctx, thread, signal, tally, cache),
-    thread => !threadDue(ctx, thread, now))
+    thread => !threadDue(ctx, thread, now, timing))
 }
 async function pollThread(ctx: SourceContext, thread: Thread, signal?: AbortSignal, tally?: Tally, cache?: FeishuCache): Promise<void> {
   const ref = threadRef(ctx, thread)

@@ -1,7 +1,7 @@
 /** Concurrency, retry, and validation tests for settings saves, pause toggling, and policy synchronization. */
 import { afterEach, expect, it, vi } from 'vitest'
 import { UserError } from '../src/core/index.ts'
-import { SettingsSchema } from '../src/policy.ts'
+import { SETTINGS_MASK, SettingsSchema } from '../src/policy.ts'
 import { Commands } from '../src/infra/commands.ts'
 import { Setup } from '../src/app/setup.ts'
 import { SettingsConflict } from '../src/app/settings.ts'
@@ -124,4 +124,19 @@ it('refuses the same route twice in one chain', () => {
   const route = { provider: 'p', model: 'm' }
   expect(() => SettingsSchema.parse({ eval: { fallbacks: [route, route] } })).toThrow('Duplicate fallback route')
   expect(SettingsSchema.parse({ eval: { fallbacks: [route, { provider: 'p', model: 'n' }] } }).eval.fallbacks).toHaveLength(2)
+})
+
+
+it('masks the marks token on every read and keeps the stored secret when a save sends the mask back', async () => {
+  h = await startRuntime()
+  const { settings, store } = h.runtime
+  const first = settings.block('marks')
+  await settings.save('marks', { ...(first.value as Record<string, unknown>), account: 'acct', token: 'secret-token' },
+    first.revision, 'panel')
+  expect(store.settings().marks).toMatchObject({ account: 'acct', token: 'secret-token' })
+  const read = settings.block('marks')
+  expect(read.value).toMatchObject({ account: 'acct', token: SETTINGS_MASK })
+  // Editing another field while the mask is on screen must not replace the stored token with bullets.
+  await settings.save('marks', { ...(read.value as Record<string, unknown>), model: 'clef-pro' }, read.revision, 'panel')
+  expect(store.settings().marks).toMatchObject({ account: 'acct', token: 'secret-token', model: 'clef-pro' })
 })

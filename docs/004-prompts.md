@@ -25,7 +25,7 @@ Overrides use these keys:
 | Working instructions | `runtime/subscriptions`, `runtime/replies`, `runtime/dispatch`, `runtime/work`, `runtime/admission` |
 | Handoff instructions | `runtime/handoff/orchestrator`, `runtime/handoff/worker` |
 | Source skills | `skill/feishu`, `skill/github` |
-| Generated sections | `runtime/environment`, `runtime/policy`, `runtime/policy/none` |
+| Generated sections | `runtime/environment`, `runtime/routing`, `runtime/policy`, `runtime/policy/none` |
 
 The generated sections are editable templates. They must retain these placeholders:
 
@@ -52,11 +52,12 @@ The system prompt is assembled in this order:
 5. `runtime/admission`, for the main Session only.
 6. Handoff instructions.
 7. `runtime/environment`.
-8. `runtime/policy`, for the main Session only.
+8. `runtime/routing`, for the main Session only.
+9. `runtime/policy`, for the main Session only.
 
 Admission instructions come from `prompts/admission.md`. They describe proactive assessment and when an irrelevant candidate can be ignored from its card. `orchestrator_eval` returns context rather than repeating these instructions.
 
-The environment section gives the main Session deployment-wide values and each Executor its Ticket-specific values. The Policy section is regenerated from settings on every model request. It contains the Policy version, accept mode, the explicit-request exemption, and enabled rules as `- <name> (<id>): <instruction>`, or a statement that none is enabled. It is last so a Policy change leaves the preceding prompt text unchanged.
+The environment section gives the main Session deployment-wide values and each Executor its Ticket-specific values. The routing section is generated from **Execution → Routing** on every model request: it lists each task type with its S/M/L rubric, so a table change reaches the Router without editing a prompt. It names no model, price or runtime. The Policy section follows it and is last, so a Policy change leaves the preceding prompt text unchanged.
 
 Executors also read DeepSeek Harness's coding prompt and the repository's `AGENTS.md`; the main Session does not. An inferred Ticket adds a final note limiting its Executor to the matched rules. Assignments and incoming messages arrive inline as Trigger cards, with resource pointers only for truncated content.
 

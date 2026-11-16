@@ -8,6 +8,7 @@ import { SaveBar } from './draft.tsx'
 import { usePanel } from './provider.tsx'
 import { TicketLine } from './rows.tsx'
 import { ConfigHistory, Field, Fields, ModelChainField, ModelField, numberOf, useBlockDraft, useSettings } from './settings-kit.tsx'
+import { DispatchBlock, RuntimesBlock } from './routing.tsx'
 import { localized } from './text.ts'
 import { ConfirmButton, Hint, LabelValue, LoadMore, LoadState, Section, StatusHead } from './widgets.tsx'
 
@@ -72,6 +73,33 @@ function EnvironmentVariables({ groups, sources,
     </div>
   </DisclosureRow>
 }
+function RoutingBlock() {
+  const { t } = usePanel()
+  const block = useSettings().settings.blocks.routing
+  const saved = { ...block.value, cooldownSeconds: String(block.value.cooldownSeconds),
+    probeSeconds: String(block.value.probeSeconds) }
+  const draft = useBlockDraft('routing', saved, block.revision, value => ({ cooldownSeconds: numberOf(value.cooldownSeconds),
+    probeSeconds: numberOf(value.probeSeconds) }))
+  const value = draft.value
+  const edit = (next: Partial<typeof value>) => draft.edit({ ...value, ...next })
+  return <form className="dt-form" onSubmit={event => { void draft.submit(event) }}>
+    <Fields disabled={draft.busy}>
+      <div className="dt-form dt-block">
+        <h2 className="dt-block-title">{t('modelRouting')}<InfoTip text={t('modelRoutingHint')} /></h2>
+        <Hint>{t('routeFallbackNote')}</Hint>
+        <Field label={t('routeCooldown')} hint={t('routeCooldownHint')}>
+          <Input type="number" min={10} max={3600} required value={value.cooldownSeconds}
+            onChange={event => edit({ cooldownSeconds: event.target.value })} />
+        </Field>
+        <Field label={t('routeProbe')} hint={t('routeProbeHint')}>
+          <Input type="number" min={10} max={600} required value={value.probeSeconds}
+            onChange={event => edit({ probeSeconds: event.target.value })} />
+        </Field>
+      </div>
+    </Fields>
+    <SaveBar {...draft} onDiscard={draft.discard} />
+  </form>
+}
 export function ExecutionSettings() {
   const { t } = usePanel()
   const { blocks, environment, sources } = useSettings().settings
@@ -125,6 +153,9 @@ export function ExecutionSettings() {
       </Fields>
       <SaveBar {...draft} onDiscard={draft.discard} />
     </form>
-    <ConfigHistory blocks={['executor', 'pause']} />
+    <RoutingBlock />
+    <RuntimesBlock />
+    <DispatchBlock />
+    <ConfigHistory blocks={['executor', 'pause', 'routing', 'runtimes', 'dispatch']} />
   </div>
 }

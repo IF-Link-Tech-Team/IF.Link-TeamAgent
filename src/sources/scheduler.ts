@@ -18,8 +18,8 @@ import { checkedImText } from '../infra/text.ts'
 import { family, record, type Key } from '../kv.ts'
 import { sourceContext, type Activity, type SourceContext } from './host.ts'
 import type { ChannelLink, SourceKind } from './kind.ts'
-import { beatDue, buildChecklist, clockLabel, deadlineLines, dueDay, dueFollows, emptyChecklist, fireWindow, JobSchema, lastScheduledAt,
-  nextFireAt, stampOf, type ChecklistDraft, type ChecklistEnded, type ChecklistFollow, type ChecklistTicket } from './scheduler-job.ts'
+import { beatDue, BEAT_POLICY, buildChecklist, clockLabel, deadlineLines, dueDay, dueFollows, emptyChecklist, fireWindow, JobSchema,
+  lastScheduledAt, nextFireAt, stampOf, type ChecklistDraft, type ChecklistEnded, type ChecklistFollow, type ChecklistTicket } from './scheduler-job.ts'
 
 export { BEAT_POLICY, beatDue, buildChecklist, emptyChecklist, JobSchema, ScheduleSchema, stampOf } from './scheduler-job.ts'
 
@@ -59,7 +59,11 @@ export const SchedulerConfigSchema = z.object({
     /** Discoveries stay out of the night; a job's own schedule is not bounded by this. */
     activeHours: z.object({ start: z.string().regex(CLOCK), end: z.string().regex(CLOCK) }).strict()
       .default({ start: '08:00', end: '23:00' }),
-  }).strict().default({ enabled: false, chatId: '', activeHours: { start: '08:00', end: '23:00' } }),
+    /** The shortest wait between two heartbeats, and how long silence alone may last before a roll call. */
+    throttleMinutes: z.number().int().min(1).max(72 * 60).default(BEAT_POLICY.throttleMs / 60_000),
+    silenceMinutes: z.number().int().min(1).max(72 * 60).default(BEAT_POLICY.silenceMs / 60_000),
+  }).strict().default({ enabled: false, chatId: '', activeHours: { start: '08:00', end: '23:00' },
+    throttleMinutes: BEAT_POLICY.throttleMs / 60_000, silenceMinutes: BEAT_POLICY.silenceMs / 60_000 }),
 }).strict()
 export type SchedulerConfig = z.infer<typeof SchedulerConfigSchema>
 
@@ -173,8 +177,36 @@ export const schedulerKind: SourceKind<SchedulerConfig> = {
   description: { zh: '把时间变成触发器：到点的定时任务与主动心跳。只看本机时钟、本地状态和记忆文件，不调任何平台 API。',
     en: 'Turns time into Triggers: scheduled jobs and the proactive heartbeat. It reads the local clock, state and memory files, never a platform API.' },
   schema: SchedulerConfigSchema,
-  // Jobs hold a nested schedule, which the panel's row editor cannot express; configure them with orchestrator_settings_save.
-  fields: [],
+  labelsFrom: 'feishu',
+  fields: [
+    { key: 'timeZone', type: 'text', pattern: '^[A-Za-z][A-Za-z0-9_+.-]*(/[A-Za-z0-9_+.-]+)*$', label: { zh: '时区', en: 'Time zone' },
+      hint: { zh: '任务的“每天 09:30”按这个时区读；主机在 UTC 时应显式设置，否则每个任务都会静默偏移几小时。',
+        en: 'A job\'s "daily 09:30" is read in this zone; set it explicitly on a UTC host, or every job shifts by hours in silence.' } },
+    { key: 'jobs', type: 'rows', label: { zh: '定时任务', en: 'Scheduled jobs' },
+      hint: { zh: '到点产生一条触发器，和群消息走同一套门闸与研判。没有填投递群的任不运行。',
+        en: 'Each occurrence produces one Trigger through the same gate and assessment as a chat message. A job without a chat does not run.' },
+      columns: [
+        { key: 'id', type: 'text', pattern: '^[a-z0-9][a-z0-9-]*$', maxLength: 40, label: { zh: 'id', en: 'id' } },
+        { key: 'title', type: 'text', maxLength: 60, label: { zh: '名字', en: 'Name' } },
+        { key: 'schedule', type: 'schedule', label: { zh: '时间', en: 'When' } },
+        { key: 'text', type: 'textarea', maxLength: 1000, label: { zh: '要做的事', en: 'What to do' } },
+        { key: 'chatId', type: 'text', optional: true, choose: { zh: '选择投递群', en: 'Choose a chat' }, pattern: 'oc_[a-zA-Z0-9]+',
+          label: { zh: '结果发到', en: 'Send result to' } },
+        { key: 'enabled', type: 'switch', initial: true, label: { zh: '启用', en: 'Enabled' } },
+      ] },
+    { key: 'heartbeat.enabled', type: 'switch', label: { zh: '主动心跳', en: 'Proactive heartbeat' },
+      hint: { zh: '每隔一段时间看一眼本机的工单、草稿、记忆和项目待办；只有在确实有值得人说的事时才调用模型并开口。',
+        en: 'Looks at local Tickets, drafts, memory and dated project lines now and then; it calls a model and speaks only when something is worth a person\'s attention.' } },
+    { key: 'heartbeat.chatId', type: 'text', choose: { zh: '选择投递群', en: 'Choose a chat' }, pattern: 'oc_[a-zA-Z0-9]+',
+      label: { zh: '心跳投递到', en: 'Heartbeat chat' }, hint: { zh: '心跳结果发到这个群；不填的心跳不运行。', en: 'The heartbeat sends here; one without a chat does not run.' } },
+    { key: 'heartbeat.activeHours.start', type: 'time', advanced: true, label: { zh: '夜间静默开始', en: 'Quiet hours start' },
+      hint: { zh: '这段时间内不因发现而主动开口；任务自己的时间不受限制。', en: 'Discoveries stay quiet inside these hours; a job\'s own schedule is not bounded by them.' } },
+    { key: 'heartbeat.activeHours.end', type: 'time', advanced: true, label: { zh: '夜间静默结束', en: 'Quiet hours end' } },
+    { key: 'heartbeat.throttleMinutes', type: 'number', min: 1, max: 4320, advanced: true, label: { zh: '两次心跳的最短间隔 / 分钟', en: 'Shortest gap between heartbeats / minutes' },
+      hint: { zh: '这段时间内不再因新的变化而心跳；沉默超过下面的时长才会点名一次。', en: 'Changes within this gap wait; only longer silence triggers a roll call.' } },
+    { key: 'heartbeat.silenceMinutes', type: 'number', min: 1, max: 4320, advanced: true, label: { zh: '最长沉默 / 分钟', en: 'Longest silence / minutes' },
+      hint: { zh: '超过这个时长没有心跳时，即使没有任何变化也做一次点名。', en: 'Without a heartbeat for this long, it looks once even when nothing changed.' } },
+  ],
   health: ['scheduler'],
   // `observed` is what lets a senderless event reach the assessment at all; without it `machineGate` answers `not_human`.
   scope: () => ({ listened: true, observed: true, row: 'beat' }),
@@ -250,7 +282,9 @@ async function runHeartbeat(ctx: SchedulerHost, now: number, current: SchedulerC
   const stamp = stampOf({ lastEventAt: activity.lastEventAt, draftsMtime: drafts.mtime, memoryMtime: memory })
   const previous = ctx.state.get(KV.beat)
   const decision = beatDue({ now, stamp, lastBeat: previous?.at, lastStamp: previous?.stamp, lastHumanAt: activity.lastHumanAt,
-    activeHours: { ...heartbeat.activeHours, timeZone: current.timeZone } })
+    activeHours: { ...heartbeat.activeHours, timeZone: current.timeZone },
+    policy: { throttleMs: heartbeat.throttleMinutes * 60_000, silenceMs: heartbeat.silenceMinutes * 60_000,
+      rideMs: BEAT_POLICY.rideMs } })
   if (!decision.beat) return
   const humanMessages = Math.max(0, (activity.humanTriggers ?? 0) - (previous?.humanTriggers ?? 0))
   const input = { now, recentHours: RECENT_HOURS, humanMessages,
