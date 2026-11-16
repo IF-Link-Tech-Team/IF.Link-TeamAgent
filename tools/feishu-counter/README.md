@@ -76,6 +76,20 @@ lark-bot im +chat-list --page-size 3 >/dev/null
 跨天的对照表里，"编排自记"一列来自 `~/.dsh/state/superagent/orchestrator.sqlite` 的
 `feishu-calls:<日期>`，最后一列是差。差值不是错误，是口径差异，看 `--by role` 就知道差在谁身上。
 
+## 额度口径（计入 / 不计入）
+
+飞书文档写明：认证及授权、事件订阅、通讯录、人事、招聘、绩效、智能门禁、应用引擎、AI 能力、智能伙伴
+这几类 OpenAPI **不占用每月调用量**。`quota.py` 按这张表把请求分成两堆：
+
+```bash
+./quota.py                # 今天：计入 / 不计入，各自多少
+./quota.py --num          # 只打印计入的那个数（巡检用）
+./report.py               # 两天对照表，"计入额度"一列才和后台对得上
+```
+
+实测一天里认证与心跳占了大头（每次 CLI 调用 1 个 token + 1 个心跳），但它们**不计入额度**，
+所以真正要盯的是"计入额度"那一列。
+
 ## 数据
 
 - `~/.dsh/feishu-counter/counter.sqlite`：一行一个请求，WAL 模式，写入在单独线程里。
