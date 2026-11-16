@@ -227,6 +227,7 @@ it('sets the model route cooldown and probe cadence beside the fallback chains',
   await mount()
   await click(zh['tab.execution'])
   await click(find(zh['tab.settings'], '.dt-status-head button'))
+  await click(zh.modelsAndRouting)
   expect(text()).toContain(zh.routeFallbackNote)
   await type(field<HTMLInputElement>(zh.routeCooldown), '120')
   await type(field<HTMLInputElement>(zh.routeProbe), '30')

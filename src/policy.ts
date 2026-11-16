@@ -220,13 +220,14 @@ export const DispatchModelSchema = z.object({
   note: z.string().trim().default(''),
   maxCostUsd: z.number().min(0).max(10_000).optional(),
 }).strict()
+/** Every type starts on DSH; the external families stay configured but disabled until someone enables them in the panel. */
 const defaultDispatchTypes = (): DispatchType[] => [
-  { id: 'research', name: '调研/核查', description: '调研、核查、对比、找资料', families: ['anthropic', 'deepseek', 'kimi'], rubric: { S: '查一个事实', M: '对比几个方案', L: '多源调研 + 结论' }, strict: false },
-  { id: 'creative', name: '设计/文案', description: '设计、文案、新闻稿、推文、海报', families: ['kimi', 'anthropic', 'deepseek'], rubric: { S: '改文案、间距、小图', M: '新页面、新组件、活动配图', L: '新视觉体系、活动主视觉' }, strict: false },
-  { id: 'writing', name: '文档', description: '文档、指南、模板、归档', families: ['anthropic', 'kimi', 'deepseek'], rubric: { S: '改一段话', M: '写/改一篇文档', L: '多篇整合、对外长文' }, strict: false },
-  { id: 'code', name: '代码', description: '实现、修 bug、重构、脚本', families: ['deepseek', 'anthropic', 'kimi'], rubric: { S: '单文件、明确修复', M: '几个文件 + 测试', L: '跨模块、方案不确定' }, strict: false },
-  { id: 'ops', name: '运维/接入', description: '服务器、账号、接入、数据', families: ['deepseek', 'anthropic', 'kimi'], rubric: { S: '查状态', M: '接入/配置', L: '迁移/部署' }, strict: false },
-  { id: 'coordination', name: '协调', description: '待办、活动、排期、群运营', families: ['deepseek', 'kimi'], rubric: { S: '列待办', M: '定活动/排期', L: '跨项目协调' }, strict: false },
+  { id: 'research', name: '调研/核查', description: '调研、核查、对比、找资料', families: ['deepseek'], rubric: { S: '查一个事实', M: '对比几个方案', L: '多源调研 + 结论' }, strict: false },
+  { id: 'creative', name: '设计/文案', description: '设计、文案、新闻稿、推文、海报', families: ['deepseek'], rubric: { S: '改文案、间距、小图', M: '新页面、新组件、活动配图', L: '新视觉体系、活动主视觉' }, strict: false },
+  { id: 'writing', name: '文档', description: '文档、指南、模板、归档', families: ['deepseek'], rubric: { S: '改一段话', M: '写/改一篇文档', L: '多篇整合、对外长文' }, strict: false },
+  { id: 'code', name: '代码', description: '实现、修 bug、重构、脚本', families: ['deepseek'], rubric: { S: '单文件、明确修复', M: '几个文件 + 测试', L: '跨模块、方案不确定' }, strict: false },
+  { id: 'ops', name: '运维/接入', description: '服务器、账号、接入、数据', families: ['deepseek'], rubric: { S: '查状态', M: '接入/配置', L: '迁移/部署' }, strict: false },
+  { id: 'coordination', name: '协调', description: '待办、活动、排期、群运营', families: ['deepseek'], rubric: { S: '列待办', M: '定活动/排期', L: '跨项目协调' }, strict: false },
   { id: 'chat', name: '轻回复', description: '天气、转达、简单问答', families: ['deepseek'], rubric: { S: '一句话回答', M: '查一下再答', L: '需要长答' }, strict: false },
 ]
 const defaultDispatchFamilies = (): Record<string, DispatchFamily> => ({

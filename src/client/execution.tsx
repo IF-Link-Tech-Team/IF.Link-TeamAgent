@@ -3,7 +3,7 @@ import { useRef, useState } from 'react'
 import { TICKET_FILTERS, type TicketFilter } from '../app/api.ts'
 import { LIMITS } from '../limits.ts'
 import { usePoll, type SettingsView, type SourceView, type StateView } from './api.ts'
-import { DisclosureRow, Icon, InfoTip, Input, Pill } from './controls.tsx'
+import { DisclosureRow, Icon, InfoTip, Input, Pill, SegmentedTabs } from './controls.tsx'
 import { SaveBar } from './draft.tsx'
 import { usePanel } from './provider.tsx'
 import { TicketLine } from './rows.tsx'
@@ -100,7 +100,7 @@ function RoutingBlock() {
     <SaveBar {...draft} onDiscard={draft.discard} />
   </form>
 }
-export function ExecutionSettings() {
+function ExecutorPane() {
   const { t } = usePanel()
   const { blocks, environment, sources } = useSettings().settings
   // Keep raw user text (such as separators between blocked commands) in the draft and parse only on save.
@@ -153,9 +153,31 @@ export function ExecutionSettings() {
       </Fields>
       <SaveBar {...draft} onDiscard={draft.discard} />
     </form>
+  </div>
+}
+
+function ModelsPane() {
+  return <div className="dt-form">
     <RoutingBlock />
     <RuntimesBlock />
     <DispatchBlock />
-    <ConfigHistory blocks={['executor', 'pause', 'routing', 'runtimes', 'dispatch']} />
+  </div>
+}
+
+type ExecutionPane = 'executor' | 'models' | 'history'
+/** Execution settings grouped into three short panes instead of one long scroll. */
+export function ExecutionSettings() {
+  const { t } = usePanel()
+  const [pane, setPane] = useState<ExecutionPane>('executor')
+  return <div className="dt-form">
+    <SegmentedTabs className="dt-subtabs" label={t('settingsGroup.execution')} value={pane} onChange={setPane}
+      items={[
+        { value: 'executor', label: t('term.executor'), id: 'dt-exec-tab-executor', panelId: 'dt-exec-pane' },
+        { value: 'models', label: t('modelsAndRouting'), id: 'dt-exec-tab-models', panelId: 'dt-exec-pane' },
+        { value: 'history', label: t('history'), id: 'dt-exec-tab-history', panelId: 'dt-exec-pane' },
+      ]} />
+    <div id="dt-exec-pane" role="tabpanel" aria-labelledby={`dt-exec-tab-${pane}`}>
+      {pane === 'executor' ? <ExecutorPane /> : pane === 'models' ? <ModelsPane /> : <ConfigHistory blocks={['executor', 'pause', 'routing', 'runtimes', 'dispatch']} />}
+    </div>
   </div>
 }

@@ -16,6 +16,15 @@ const settings = (patch: (value: Settings) => void = () => {}): Settings => {
 }
 
 describe('task routing', () => {
+  it('ships every type on DSH and every external runtime off until someone enables one', () => {
+    const value = SettingsSchema.parse({})
+    expect(value.dispatch.enabled).toBe(false)
+    expect(value.dispatch.types.every(type => type.families.length === 1 && type.families[0] === 'deepseek')).toBe(true)
+    expect(value.runtimes.dsh?.enabled).toBe(true)
+    for (const id of ['kimi-code', 'antigravity', 'claude-code']) expect(value.runtimes[id]?.enabled).toBe(false)
+    expect(value.executor.model).toBeNull()
+  })
+
   it('keeps every ticket on DSH while dispatch is off', () => {
     const route = chooseRoute(SettingsSchema.parse({}), { type: 'creative', difficulty: 'L' })
     expect(route).toMatchObject({ harness: 'dsh', family: 'deepseek', degraded: false })

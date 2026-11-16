@@ -3,7 +3,7 @@
 > 状态：设计稿，2026-11-15。基于当前仓库代码（`src/executor/dsh.ts`、`src/app/sessions.ts`、`src/app/model-router.ts`）与 2026-11 的 CLI 生态调研。
 > 结论先行：**方向成立，切口不是重写 Engine，而是把 Executor 从“一个 DSH 实现”改成“一个调度器 + 多个运行时适配器”；模型选择按“任务类型 → 厂商、任务难度 → 厂商内型号”的两维表来，表由团队在面板里手动维护，Router 只判断类型和难度；在写代码之前先用 10 道真实题做一次同题对比，确认 DSH 对非 DeepSeek 模型的差距值得三周工程量。**
 >
-> **实施状态（2026-11-16）**：按团队决定跳过 P0 同题对照，直接进入接入。配置 schema、`DispatchExecutor`、`AcpExecutor`、MCP bridge、路由解析和面板编辑器已经落地，`pnpm check` 通过；`dispatch.enabled` 仍为 `false`，所以默认行为不变。Kimi Code CLI 2.5.3、Antigravity CLI 1.5.9、Claude Code 2.1.325 与 `claude-agent-acp` 0.107.0 已安装，三台 CLI 的登录尚未完成；线上服务尚未重启。
+> **实施状态（2026-11-16）**：按团队决定跳过 P0 同题对照，直接进入接入。配置 schema、`DispatchExecutor`、`AcpExecutor`、MCP bridge、路由解析和面板编辑器已经落地，`pnpm check` 通过；`dispatch.enabled` 仍为 `false`，默认表里每个任务类型也只指向 `deepseek`（DSH），外部 family 保留但关闭，所以重启后所有工单仍走 DSH 和现有模型。Kimi Code CLI 2.5.3、Antigravity CLI 1.5.9、Claude Code 2.1.325 与 `claude-agent-acp` 0.107.0 已安装，三台 CLI 的登录尚未完成；线上服务尚未重启。
 
 ---
 
