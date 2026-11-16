@@ -431,8 +431,11 @@ class Handler(socketserver.BaseRequestHandler):
                 print(f'counter: upstream {host}: {error}', file=sys.stderr, flush=True)
                 return
             upstream_tls.settimeout(120)
+            upgrade = headers.get('upgrade', '').lower() == 'websocket'
             forwarded = {k: v for k, v in headers.items() if k not in ('proxy-connection', 'connection')}
-            forwarded['connection'] = 'close'
+            # 升级请求必须把 `Connection: Upgrade` 原样带过去；改成 close 会让服务端在 101 之后立刻关连接，
+            # 客户端看到的是"连上了又断了"，永远等不到 ready。
+            forwarded['connection'] = 'Upgrade' if upgrade else 'close'
             request = f'{method} {path} {version}\r\n' + ''.join(f'{k}: {v}\r\n' for k, v in forwarded.items()) + '\r\n'
             upstream_tls.sendall(request.encode('latin-1') + body)
             up_reader = Reader(upstream_tls)
@@ -442,6 +445,14 @@ class Handler(socketserver.BaseRequestHandler):
                 if status == 101:
                     self._record(host, method, path, status, start, len(head) + len(body), resp_bytes, pid, ppid, role, cmd,
                                  'stream')
+                    # 升级成裸字节之前，两条方向上已经读进缓冲区的字节必须先交出去：服务端常在 101 之后立刻推一帧，
+                    # 那一帧如果留在这个 Reader 的缓冲里，客户端就永远等不到"连上了"。
+                    if up_reader.buf:
+                        tls.sendall(up_reader.buf)
+                        up_reader.buf = b''
+                    if stream.buf:
+                        upstream_tls.sendall(stream.buf)
+                        stream.buf = b''
                     relay_raw(upstream_tls, tls)
                     return
                 self._record(host, method, path, status, start, len(head) + len(body), resp_bytes, pid, ppid, role, cmd, kind)
