@@ -361,6 +361,7 @@ Some generic modules still refer directly to GitHub or Feishu:
 | `src/app/tools/tool.ts` | The `Tool` type, `readTool`, the `orchestrator_read` of both roles, and `AcknowledgementSchema` |
 | `src/app/tools/main.ts` | The main Session's tools |
 | `src/app/tools/executor.ts` | An Executor Session's tools |
+| `src/app/clock.ts` | The application clock: domain timestamps read it through `Runtime`, and a test constructs its own instead of replacing a global |
 | `src/app/actions.ts` | The operations a person or the main Session asks for — retry, stop, note, status, requeue, unsubscribe, attach — written once for the tools and the management API; which follow-up may be requeued depends on who asked |
 | `src/app/http.ts` | The `/orchestrator/api` routes: the same-origin check, request limits and one status per kind of failure |
 | `src/app/api.ts` | `Api`, every route with its parameters, query, body and response, and the filters of the lists; it imports only types, so the panel bundles it |

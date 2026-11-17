@@ -13,6 +13,7 @@ import type {} from '@deepseek-ai/dsh-subprocess'
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { lockSync } from 'proper-lockfile'
+import { type Clock, systemClock } from './clock.ts'
 import { Engine, key, reasonText, type DomainEvent, type EngineForSettings, type ReceiveResult, type Ticket, type Trigger } from '../core/index.ts'
 import { allowedSender, settingsPolicy } from '../policy/index.ts'
 import { SourceRegistry } from '../sources/registry.ts'
@@ -95,7 +96,7 @@ export class Runtime extends Service implements SourceHost {
   private readonly toolHost: MainToolsHost & ExecutorToolsHost
   /** Non-zero while a main-Session tool is executing an Engine command, suppressing self-triggered domain event notices. */
   private quiet = 0
-  constructor(ctx: Context, readonly machine: Machine, restart: () => void) {
+  constructor(ctx: Context, readonly machine: Machine, restart: () => void, private readonly clock: Clock = systemClock) {
     super(ctx, 'orchestrator')
     const runtime = this
     // Lock the state directory before opening the database so another process cannot migrate or write concurrently.
@@ -163,7 +164,7 @@ export class Runtime extends Service implements SourceHost {
       const policy = () => settingsPolicy(store.settings(), sources, { degraded: this.router.degraded() })
       // Kept in memory: a Source reads it to decide whether a model call is worth it, and a restart may refresh it.
       const activity: { lastEventAt?: number; lastHumanAt?: number; humanTriggers: number } = { humanTriggers: 0 }
-      const engine = this.engine = new Engine({ repo: store, scope: sources, policy, assessor, executor,
+      const engine = this.engine = new Engine({ repo: store, scope: sources, policy, assessor, executor, now: () => new Date(this.clock.now()).toISOString(),
         gestures: new Gestures(store, Date.now, () => store.settings().policy.gestures),
         outbox, prepareTicket: (ticket, outcome) => executor.prepare(ticket, outcome),
         emit: event => this.announce(event, { store, sources, sessions, outbox, activity,
