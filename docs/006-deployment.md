@@ -77,9 +77,28 @@ curl -fsSL https://code.kimi.com/kimi-code/install.sh | bash   # kimi, then `kim
 curl -fsSL https://antigravity.google/cli/install.sh | bash    # agy, then `agy acp --login`
 curl -fsSL https://claude.ai/install.sh | bash                 # claude, then sign in once
 npm install -g --prefix ~/.local @agentclientprotocol/claude-agent-acp   # the ACP entry point for Claude
+curl -fsSL https://pi.dev/install.sh | sh                      # pi, then configure a provider (below)
+npm install -g --prefix ~/.local pi-acp                        # the ACP entry point for Pi
 ```
 
-Claude Code reads `CLAUDE.md` as its prompt file and accepts the `haiku`/`sonnet`/`opus` model aliases; its ACP adapter uses an existing `claude` login, or `ANTHROPIC_API_KEY` in the runtime's env file. The other two read `AGENTS.md`.
+Claude Code reads `CLAUDE.md` as its prompt file and accepts the `haiku`/`sonnet`/`opus` model aliases; its ACP adapter uses an existing `claude` login, or `ANTHROPIC_API_KEY` in the runtime's env file. Kimi, Antigravity and Pi read `AGENTS.md`.
+
+### Pi
+
+Pi keeps its providers in `~/.pi/agent/models.json` and names a model `provider/model`, so its family's S/M/L slots are filled in the panel as `provider/modelId` (see `pi --list-models`). Configure a provider once, for example an OpenAI-compatible gateway:
+
+```jsonc
+// ~/.pi/agent/models.json, mode 0600
+{ "providers": { "gateway": { "name": "Gateway", "baseUrl": "https://gateway.example.com/v1",
+  "api": "openai-completions", "apiKey": "$GATEWAY_API_KEY",
+  "models": [{ "id": "deepseek-v4.1-flash-1017", "name": "deepseek-v4.1-flash-1017", "reasoning": true,
+    "input": ["text"], "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+    "contextWindow": 1000000, "maxTokens": 8192 }] } } }
+```
+
+`apiKey` reading `$GATEWAY_API_KEY` needs that variable in Pi's environment: name it in the runtime's **secret env file**. Set the default with `pi` → `/model`, or let the panel's model selection set it per Ticket.
+
+`pi-acp` accepts the ACP `mcpServers` of a session without connecting them, so Pi reads the `teamagent` tools from its own user-level `~/.pi/agent/mcp.json`. The runtime profile's **MCP config file** names that path and the plugin writes it on every launch, replacing only its own `teamagent` entry. The entry carries no variables: the relay inherits `TEAMAGENT_MCP_*` from the launch, so a person running `pi` directly gets an empty server instead of a failed one.
 
 Then open **Execution → Worker runtimes**, enable the runtime, keep or correct its command and prompt file (`AGENTS.md`), and set an env file (0600, `KEY=VALUE`) for any API key. Open **Execution → Task routing**, enable routing, fill each family's S/M/L model ids, and order the families for each task type. `dispatch.enabled` off keeps every Ticket on DSH. A family with an empty model slot, a disabled runtime or an unauthenticated CLI is skipped; when nothing is available the Ticket records a degraded DSH fallback.
 

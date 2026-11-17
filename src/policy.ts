@@ -162,6 +162,14 @@ export const RuntimeProfileSchema = z.object({
   /** `config` uses ACP session config options, `arg` appends `modelArg` with `{model}`, `none` uses the CLI default. */
   modelMode: z.enum(['config', 'arg', 'none']).default('config'),
   modelArg: z.string().trim().default(''),
+  /**
+   * A harness configuration file that receives this installation's `teamagent` MCP server, for a runtime whose ACP
+   * session ignores the `mcpServers` its client sends. `{package}` and `~` resolve at write time; values reference the
+   * launch's `TEAMAGENT_MCP_*` variables. Empty writes nothing.
+   */
+  mcpConfigPath: z.string().trim().default(''),
+  /** The `exposure` field that file carries, when the harness has one; empty omits it. */
+  mcpExposure: z.string().trim().default(''),
   concurrency: z.number().int().min(1).max(LIMITS.maxWorkers.max).default(1),
   maxWallMinutes: z.number().int().min(1).max(1440).default(60),
   maxTurns: z.number().int().min(1).max(1000).default(200),
@@ -172,6 +180,9 @@ const defaultRuntimes = (): Record<string, RuntimeProfile> => ({
   'kimi-code': RuntimeProfileSchema.parse({ command: '~/.kimi-code/bin/kimi', args: ['acp'], promptFiles: ['AGENTS.md'] }),
   antigravity: RuntimeProfileSchema.parse({ command: '~/.local/bin/agy', args: ['acp'], promptFiles: ['AGENTS.md'] }),
   'claude-code': RuntimeProfileSchema.parse({ command: '~/.local/bin/claude-agent-acp', promptFiles: ['CLAUDE.md'] }),
+  // pi-acp stores the ACP `mcpServers` without connecting them, so pi reads the bridge from its own user-level file.
+  pi: RuntimeProfileSchema.parse({ command: '~/.local/bin/pi-acp', promptFiles: ['AGENTS.md'],
+    mcpConfigPath: '~/.pi/agent/mcp.json', mcpExposure: 'direct' }),
 })
 /** Difficulty levels are local to a task type: the same S means different work for `code` and `creative`. */
 export const DifficultySchema = z.enum(['S', 'M', 'L'])
@@ -237,6 +248,8 @@ const defaultDispatchFamilies = (): Record<string, DispatchFamily> => ({
   anthropic: { label: 'Claude', enabled: false, harness: 'claude-code',
     models: { S: 'haiku', M: 'sonnet', L: 'opus' }, harnessByModel: {}, account: '' },
   antigravity: { label: 'Antigravity', enabled: false, harness: 'antigravity', models: { S: '', M: '', L: '' }, harnessByModel: {}, account: '' },
+  // pi names a model `provider/model`, so its slots start empty and the panel fills them in.
+  pi: { label: 'Pi', enabled: false, harness: 'pi', models: { S: '', M: '', L: '' }, harnessByModel: {}, account: '' },
 })
 /**
  * Worker routing: task type decides the family order, difficulty decides the model, and the table stays editable in

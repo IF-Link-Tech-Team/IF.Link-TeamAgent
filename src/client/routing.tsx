@@ -20,7 +20,7 @@ export function RuntimesBlock() {
     const id = newId.trim()
     if (!id || value[id]) return
     draft.edit({ ...value, [id]: { enabled: false, protocol: 'acp', command: '', args: [], env: {}, envFile: '', promptFiles: ['AGENTS.md'],
-      modelMode: 'config', modelArg: '', concurrency: 1, maxWallMinutes: 60, maxTurns: 200 } })
+      modelMode: 'config', modelArg: '', mcpConfigPath: '', mcpExposure: '', concurrency: 1, maxWallMinutes: 60, maxTurns: 200 } })
     setNewId('')
   }
   const mode = (profile: RuntimeProfile) => profile.modelMode === 'config' ? t('runtimeModelConfig')
@@ -71,6 +71,12 @@ export function RuntimesBlock() {
                   onChange={event => set(id, { maxWallMinutes: Number(event.target.value) })} /></Field>
                 <Field label={t('runtimeTurns')}><Input type="number" min={1} max={1000} value={profile.maxTurns}
                   onChange={event => set(id, { maxTurns: Number(event.target.value) })} /></Field>
+              </div>
+              <div className="dt-grid3">
+                <Field label={t('runtimeMcpConfigPath')} hint={t('runtimeMcpConfigPathHint')}>
+                  <Input className="dt-mono" value={profile.mcpConfigPath} onChange={event => set(id, { mcpConfigPath: event.target.value })} /></Field>
+                <Field label={t('runtimeMcpExposure')} hint={t('runtimeMcpExposureHint')}>
+                  <Input className="dt-mono" value={profile.mcpExposure} onChange={event => set(id, { mcpExposure: event.target.value })} /></Field>
               </div>
               <Field label={t('runtimeEnv')}><textarea className="dt-textarea dt-mono" rows={2}
                 value={Object.entries(profile.env).map(([key, item]) => `${key}=${item}`).join('\n')}

@@ -1,8 +1,8 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { AcpExecutor } from '../src/executor/acp.ts'
+import { AcpExecutor, writeMcpConfig } from '../src/executor/acp.ts'
 import { WorkerSlots } from '../src/executor/dsh.ts'
 import { SettingsSchema } from '../src/policy.ts'
 import type { Assignment, Ticket } from '../src/core/index.ts'
@@ -39,7 +39,7 @@ describe('ACP executor', () => {
       origin: { triggerId: 'tr1', triggerIds: ['tr1'] }, execution: { name: 'ticket', directory: cwd, assignment: 'Do it', runtime: 'fake', model: 'm' } }
     const settings = SettingsSchema.parse({})
     settings.runtimes.fake = { enabled: true, protocol: 'acp', command: process.execPath, args: [script], env: {}, envFile: '', promptFiles: [],
-      modelMode: 'config', modelArg: '', concurrency: 1, maxWallMinutes: 1, maxTurns: 5 }
+      modelMode: 'config', modelArg: '', mcpConfigPath: '', mcpExposure: '', concurrency: 1, maxWallMinutes: 1, maxTurns: 5 }
     const executor = new AcpExecutor({
       context: { subprocess: {} } as never,
       engine: {
@@ -67,5 +67,32 @@ describe('ACP executor', () => {
     expect(calls).toContain('started')
     expect(calls).toContain('ended')
     executor.shutdown()
+  })
+})
+
+describe('harness MCP config', () => {
+  it('writes the teamagent entry, keeps other servers, and omits the environment', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'teamagent-mcpcfg-')); dirs.push(root)
+    const target = join(root, 'mcp.json')
+    writeFileSync(target, JSON.stringify({ mcpServers: { other: { command: 'other' } }, unrelated: true }))
+    await writeMcpConfig({ mcpConfigPath: target, mcpExposure: 'direct' }, '/opt/teamagent')
+    const written = JSON.parse(readFileSync(target, 'utf8')) as { mcpServers: Record<string, Record<string, unknown>>; unrelated: boolean }
+    expect(written.unrelated).toBe(true)
+    expect(Object.keys(written.mcpServers).sort()).toEqual(['other', 'teamagent'])
+    expect(written.mcpServers.teamagent).toMatchObject({ command: process.execPath, exposure: 'direct' })
+    expect(written.mcpServers.teamagent!.args).toEqual(['/opt/teamagent/lib/worker-mcp.js'])
+    // The relay inherits TEAMAGENT_MCP_* from the launch, so no variable is written that a person's own run must resolve.
+    expect(written.mcpServers.teamagent!.env).toBeUndefined()
+    // Re-running refreshes the same entry instead of appending a second one.
+    await writeMcpConfig({ mcpConfigPath: target, mcpExposure: '' }, '/opt/teamagent')
+    const again = JSON.parse(readFileSync(target, 'utf8')) as { mcpServers: Record<string, Record<string, unknown>> }
+    expect(Object.keys(again.mcpServers)).toHaveLength(2)
+    expect(again.mcpServers.teamagent!.exposure).toBeUndefined()
+  })
+
+  it('writes nothing when the profile names no file', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'teamagent-mcpcfg-')); dirs.push(root)
+    await writeMcpConfig({ mcpConfigPath: '', mcpExposure: 'direct' }, root)
+    expect(readdirSync(root)).toEqual([])
   })
 })

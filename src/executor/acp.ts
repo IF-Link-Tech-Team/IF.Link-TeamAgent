@@ -2,7 +2,7 @@
 import { spawn, type ChildProcess } from 'node:child_process'
 import { appendFile, cp, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { Readable, Writable } from 'node:stream'
 import { client, ndJsonStream } from '@agentclientprotocol/sdk'
 import type { ClientConnection, ContentBlock, RequestPermissionResponse, SessionNotification } from '@agentclientprotocol/sdk'
@@ -17,7 +17,7 @@ import { Later, type Effects } from '../app/effects.ts'
 import type { Variable } from '../app/execution-environment.ts'
 import type { Prompts } from '../app/prompts.ts'
 import type { HealthEntry } from '../infra/health.ts'
-import { packagePath } from '../infra/paths.ts'
+import { packagePath, packageRoot } from '../infra/paths.ts'
 import type { WorkerMcpServer } from '../app/mcp-server.ts'
 import type { WorkerSlots } from './dsh.ts'
 import { inputMessage, mandateInstructions, sourceTrigger, triggerMessage, transient } from './dsh.ts'
@@ -35,6 +35,7 @@ const RUNTIME_CONTRACT = [
   '`orchestrator_report` reports progress, ready, blocked, failed or dropped, and `orchestrator_thread_follow`,',
   '`orchestrator_thread_unrelated` and `orchestrator_trigger_handback` manage threads and out-of-scope messages.',
   'Before ending any turn, call `orchestrator_report`. If you need a person, report blocked with one concrete question.',
+  'Your harness may prefix these names, such as `mcp__teamagent__orchestrator_report`; that is the same tool.',
   'Team memory is in `memory/`; read it before a decision. Team skills are in `.teamagent/skills`; read the matching `SKILL.md` before Feishu or GitHub operations.',
   'Work only inside this ticket directory; never merge a pull request, close an Issue or expose private chat content.',
 ].join('\n')
@@ -113,6 +114,28 @@ async function writePrompt(cwd: string, files: string[], text: string): Promise<
     try { current = await readFile(path, 'utf8') } catch { /* A new prompt file. */ }
     await writeFile(path, mergePrompt(current, block))
   }
+}
+
+/**
+ * Write (or refresh) the harness configuration file that carries this installation's `teamagent` MCP server, for a
+ * runtime that ignores the `mcpServers` of its ACP session. Only the `teamagent` entry is touched, so a file a person
+ * also uses keeps their own servers.
+ *
+ * The entry carries no `env`: the relay inherits the launch's `TEAMAGENT_MCP_*` variables, and a run without them — a
+ * person using the same harness directly — gets an empty server rather than an unresolved variable.
+ */
+export async function writeMcpConfig(profile: Pick<RuntimeProfile, 'mcpConfigPath' | 'mcpExposure'>, packageDirectory: string): Promise<void> {
+  const path = profile.mcpConfigPath
+  if (!path) return
+  const target = expandHome(path.replaceAll('{package}', packageDirectory))
+  const entry = { command: process.execPath, args: [join(packageDirectory, 'lib', 'worker-mcp.js')],
+    ...profile.mcpExposure ? { exposure: profile.mcpExposure } : {} }
+  let current: Record<string, unknown> = {}
+  try { current = JSON.parse(await readFile(target, 'utf8')) as Record<string, unknown> } catch { /* A new file. */ }
+  const servers = typeof current.mcpServers === 'object' && current.mcpServers ? current.mcpServers as Record<string, unknown> : {}
+  const next = { ...current, mcpServers: { ...servers, teamagent: entry } }
+  await mkdir(dirname(target), { recursive: true })
+  await writeFile(target, `${JSON.stringify(next, null, 2)}\n`)
 }
 
 /**
@@ -208,6 +231,8 @@ export class AcpExecutor {
     }
     const prompt = this.promptText(ticket)
     await writePrompt(cwd, profile.promptFiles, prompt)
+    // A runtime that ignores ACP `mcpServers` reads the bridge from the file its profile names.
+    await writeMcpConfig(profile, packageRoot()).catch(() => { /* A runtime without one keeps its own tools. */ })
     // The worker reads the same Source skills a DSH Session registers, from a stable path inside its ticket.
     const skills = join(cwd, '.teamagent', 'skills')
     await rm(skills, { recursive: true, force: true })

@@ -211,9 +211,9 @@ Transient provider and network failures get three retries. Launches use effect b
 
 ### AcpExecutor
 
-`AcpExecutor` (`src/executor/acp.ts`) hosts a Ticket on an ACP agent. `launchNow` prepares the shared workspace, writes the worker prompt into the profile's prompt files, starts the profile command, runs ACP `initialize`, `session/new` (or `session/load`), selects the model through `session/set_config_option` when the profile says `config`, and sends the assignment. `deliverNow` queues an Input behind the current turn; `stop` sends `session/cancel` and then stops the process tree.
+`AcpExecutor` (`src/executor/acp.ts`) hosts a Ticket on an ACP agent. `launchNow` prepares the shared workspace, writes the worker prompt into the profile's prompt files, refreshes the `teamagent` entry of the harness's own MCP config file when its profile names one (`writeMcpConfig`), starts the profile command, runs ACP `initialize`, `session/new` (or `session/load`), selects the model through `session/set_config_option` when the profile says `config`, and sends the assignment. `deliverNow` queues an Input behind the current turn; `stop` sends `session/cancel` and then stops the process tree.
 
-`chooseRoute` (`src/app/dispatch.ts`) turns the type and difficulty into a family and model using `Settings.dispatch`; it never names a model itself. `WorkerMcpServer` (`src/app/mcp-server.ts`) serves the Ticket's `orchestrator_*` tools over the Unix socket, and `src/worker-mcp.ts` is the stdio relay a harness starts. An ACP turn that ends without a status becomes a `waiting` Report; a blocked, failed or dropped Report closes the run.
+`chooseRoute` (`src/app/dispatch.ts`) turns the type and difficulty into a family and model using `Settings.dispatch`; it never names a model itself. `WorkerMcpServer` (`src/app/mcp-server.ts`) serves the Ticket's `orchestrator_*` tools over the Unix socket, and `src/worker-mcp.ts` is the stdio relay a harness starts; without the launch's `TEAMAGENT_MCP_*` variables it serves an empty tool list, so a shared config file stays harmless outside a Ticket. An ACP turn that ends without a status becomes a `waiting` Report; a blocked, failed or dropped Report closes the run.
 
 ### MasterAssessor
 
@@ -367,9 +367,9 @@ Some generic modules still refer directly to GitHub or Feishu:
 | `src/app/dispatch.ts` | `chooseRoute`: the deterministic task type → family → model → runtime resolution, its `DispatchRoute` and `modelAt` |
 | `src/app/mcp-server.ts` | `WorkerMcpServer`: the Unix-socket MCP server that gives an external worker runtime its ticket's `orchestrator_*` tools |
 | `src/executor/dispatch.ts` | `DispatchExecutor`: the Engine's Executor port, choosing DSH or an ACP runtime per Assignment, and `ticketRoute` |
-| `src/executor/acp.ts` | `AcpExecutor`: one ACP process and session per Ticket, prompt injection, permission answers, transcript, turn and failure mapping |
+| `src/executor/acp.ts` | `AcpExecutor`: one ACP process and session per Ticket, prompt injection, the harness MCP config (`writeMcpConfig`), permission answers, transcript, turn and failure mapping |
 | `src/executor/workspace.ts` | `prepareWorkspace`, `copyMemory` and `PrepareFailed`: the ticket workspace both runtimes share |
-| `src/worker-mcp.ts` | The stdio MCP relay packaged as `lib/worker-mcp.js`; it forwards a harness's MCP messages to `WorkerMcpServer` |
+| `src/worker-mcp.ts` | The stdio MCP relay packaged as `lib/worker-mcp.js`; it forwards a harness's MCP messages to `WorkerMcpServer`, and serves an empty tool list when the launch set no ticket |
 | `src/executor/dsh.ts` | The DshExecutor, `WorkerSlots`, `ticketExecution`, `inputMessage` and `mandateInstructions` |
 | `src/executor/background.ts` | A worker's background work in DeepSeek Harness, the shell jobs its Session owns (`ctx.jobs`) and its subagents (`ctx.subagents`): `runningJobs`, `untilQuiet`, `killJobs`, `collectJobs`, `stopSubagents`, `stopBackground`, `until`, and `cancelled`, the workers whose turn a stop of their subagents cancelled |
 | `src/infra/commands.ts` | `Commands`, the CLI transport: `run`; `api` and `pages`, limited to the configured repository and validated; `lark` as the bot; `git`. `CliError` carries the code a command's output reports, such as a GitHub HTTP status, and a command that prints nothing fails with how it ended, never with its arguments; `validItems` skips and counts the malformed items of a list |

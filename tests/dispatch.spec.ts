@@ -21,7 +21,9 @@ describe('task routing', () => {
     expect(value.dispatch.enabled).toBe(false)
     expect(value.dispatch.types.every(type => type.families.length === 1 && type.families[0] === 'deepseek')).toBe(true)
     expect(value.runtimes.dsh?.enabled).toBe(true)
-    for (const id of ['kimi-code', 'antigravity', 'claude-code']) expect(value.runtimes[id]?.enabled).toBe(false)
+    for (const id of ['kimi-code', 'antigravity', 'claude-code', 'pi']) expect(value.runtimes[id]?.enabled).toBe(false)
+    // pi reads the bridge from its own config file; nothing else is preconfigured for it.
+    expect(value.runtimes.pi).toMatchObject({ mcpConfigPath: '~/.pi/agent/mcp.json', mcpExposure: 'direct' })
     expect(value.executor.model).toBeNull()
   })
 
