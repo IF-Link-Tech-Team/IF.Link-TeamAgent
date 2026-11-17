@@ -8,7 +8,7 @@ import { Store, SCHEMA_VERSION } from '../src/app/store.ts'
 import { MemoryRepositories, key, type Assignment, type Decision, type Repositories, type Thread, type Ticket } from '../src/core/index.ts'
 import { threadFacts } from '../src/app/views/records.ts'
 import { KV } from '../src/kv.ts'
-import { SettingsSchema } from '../src/policy.ts'
+import { SettingsSchema } from '../src/policy/index.ts'
 
 
 let directory: string

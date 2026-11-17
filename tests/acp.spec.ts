@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AcpExecutor, writeMcpConfig } from '../src/executor/acp.ts'
 import { WorkerSlots } from '../src/executor/dsh.ts'
-import { SettingsSchema } from '../src/policy.ts'
+import { SettingsSchema } from '../src/policy/index.ts'
 import type { Assignment, Ticket } from '../src/core/index.ts'
 
 const dirs: string[] = []

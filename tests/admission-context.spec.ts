@@ -4,7 +4,7 @@ import { Commands } from '../src/infra/commands.ts'
 import { feishuKind } from '../src/sources/feishu.ts'
 import type { ContextMessage } from '../src/sources/kind.ts'
 import { SourceRegistry } from '../src/sources/registry.ts'
-import { SettingsSchema } from '../src/policy.ts'
+import { SettingsSchema } from '../src/policy/index.ts'
 import { testDeployment } from './fixtures/deployment.ts'
 import type { Trigger } from '../src/core/index.ts'
 const message = (index: number): ContextMessage => ({ id: `om_${index}`, from: 'ou_user', at: String(index), text: `Message ${index}` })

@@ -4,7 +4,7 @@ import { registerHttp } from '../src/app/http.ts'
 import { PromptConflict } from '../src/app/prompts.ts'
 import { SettingsConflict } from '../src/app/settings.ts'
 import type { HttpHost } from '../src/app/http.ts'
-import { SettingsSchema } from '../src/policy.ts'
+import { SettingsSchema } from '../src/policy/index.ts'
 import { SetupError } from '../src/setup-errors.ts'
 
 type Handler = (req: unknown, res: unknown) => Promise<void>

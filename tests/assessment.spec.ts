@@ -5,7 +5,7 @@ import { AssessmentSchema, EvalReadSchema, MainAssessor, type AssessorDeps } fro
 import { mainAdmissionPolicy } from '../src/app/context.ts'
 import { Engine, MemoryRepositories, type Executor, type Policy, type Trigger } from '../src/core/index.ts'
 import type { Commands } from '../src/infra/commands.ts'
-import { SettingsSchema } from '../src/policy.ts'
+import { SettingsSchema } from '../src/policy/index.ts'
 import { testDeployment } from './fixtures/deployment.ts'
 import { deferred } from './fixtures/async.ts'
 import { githubKind } from '../src/sources/github.ts'

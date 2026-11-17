@@ -1,7 +1,7 @@
 /** Routing, cooldown, hop-guard, probe and degraded-state tests for the model router. */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ModelRouter } from '../src/app/model-router.ts'
-import { SettingsSchema, type Settings } from '../src/policy.ts'
+import { SettingsSchema, type Settings } from '../src/policy/index.ts'
 
 type Route = { provider: string; model: string }
 const route = (provider: string, model: string): Route => ({ provider, model })

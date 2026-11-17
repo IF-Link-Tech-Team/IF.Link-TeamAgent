@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { SettingsSchema, type Settings } from '../src/policy.ts'
+import { SettingsSchema, type Settings } from '../src/policy/index.ts'
 import { chooseRoute, modelAt } from '../src/app/dispatch.ts'
 
 const settings = (patch: (value: Settings) => void = () => {}): Settings => {

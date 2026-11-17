@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
-import { SettingsSchema } from '../src/policy.ts'
+import { SettingsSchema } from '../src/policy/index.ts'
 import { SourceRegistry } from '../src/sources/registry.ts'
 import type { SourceKind } from '../src/sources/kind.ts'
 import type { Agent } from '@deepseek-ai/dsh-agent'

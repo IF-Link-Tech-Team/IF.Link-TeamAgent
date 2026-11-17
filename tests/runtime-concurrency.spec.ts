@@ -4,7 +4,7 @@ import { latestAssignment, blockedOnPerson, type Ticket, type Trigger } from '..
 import { Later } from '../src/app/effects.ts'
 import { reportRelay } from '../src/app/notices.ts'
 import { WorkerSlots, inputMessage, mandateInstructions, ticketExecution, transient, triggerMessage } from '../src/executor/dsh.ts'
-import { SettingsSchema } from '../src/policy.ts'
+import { SettingsSchema } from '../src/policy/index.ts'
 import { Commands } from '../src/infra/commands.ts'
 import { deferred, waitUntil } from './fixtures/async.ts'
 import { CHAT, MEMBER, feishu, startRuntime, type Host } from './fixtures/host.ts'
