@@ -13,7 +13,7 @@ import type {} from '@deepseek-ai/dsh-subprocess'
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { lockSync } from 'proper-lockfile'
-import { Engine, key, reasonText, type EngineForSettings, type ReceiveResult, type Ticket, type Trigger } from '../core/index.ts'
+import { Engine, key, reasonText, type DomainEvent, type EngineForSettings, type ReceiveResult, type Ticket, type Trigger } from '../core/index.ts'
 import { allowedSender, settingsPolicy } from '../policy/index.ts'
 import { SourceRegistry } from '../sources/registry.ts'
 import { Commands } from '../infra/commands.ts'
@@ -46,6 +46,7 @@ import { Passes } from './passes.ts'
 import { Setup } from './setup.ts'
 import { feishuSettings } from '../sources/feishu.ts'
 import { health, type Health, type SourceContext, type SourceHost } from '../sources/host.ts'
+import type { HealthEntry } from '../infra/health.ts'
 import { Sessions } from './sessions.ts'
 import { ModelRouter } from './model-router.ts'
 import { Settings } from './settings.ts'
@@ -156,33 +157,7 @@ export class Runtime extends Service implements SourceHost {
       this.assessor = new MainAssessor({ get engine() { return runtime.engine }, commands, get deployment() { return setup.deployment }, effects,
         settings: () => store.settings(), paused: () => this.paused(), threadContext: trigger => sources.threadContext(trigger),
         deliver: (id, text) => sessions.prompt(mainSessionId, id, text, 'steer'), candidateCard: candidate => candidateCard(links, candidate) })
-      // The pick reads the message and the work around it. Its account and model come from the Marks settings on every
-      // pick, falling back to the environment; without either it stays quiet and a Channel draws its own mark.
-      const marksHealth = board.claim('marks', { state: 'ready', detail: 'No mark picked yet' })
-      const reactionAccount = () => {
-        const config = store.settings().marks
-        return { config, account: config.account || process.env.CLOUDFLARE_ACCOUNT_ID || '',
-          token: config.token || process.env.CLOUDFLARE_WORKERS_AI_API_KEY || process.env.CLOUDFLARE_API_KEY || '' }
-      }
-      const marks: ReactionChooser = { pick: async message => {
-        const { config, account, token } = reactionAccount()
-        if (!config.enabled) {
-          marksHealth.set({ state: 'paused', detail: 'Mark picking is off', at: new Date().toISOString() })
-          return undefined
-        }
-        if (!account || !token) {
-          marksHealth.set({ state: 'paused', detail: 'Set the Cloudflare account and token in the Marks settings, or in CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_WORKERS_AI_API_KEY',
-            at: new Date().toISOString() })
-          return undefined
-        }
-        return new ReactionPicker({ store, health: marksHealth }, { account, token, model: config.model, timeoutMs: config.timeoutMs }).pick(message)
-      } }
-      // Report the starting state once; a later save is reflected by the next pick.
-      const initialMarks = reactionAccount()
-      if (!initialMarks.config.enabled) marksHealth.set({ state: 'paused', detail: 'Mark picking is off', at: new Date().toISOString() })
-      else if (!initialMarks.account || !initialMarks.token) marksHealth.set({ state: 'paused',
-        detail: 'Set the Cloudflare account and token in the Marks settings', at: new Date().toISOString() })
-      else marksHealth.set({ state: 'ready', detail: 'Ready to pick an emoji', at: new Date().toISOString() })
+      const marks = this.reactionChooser(store, board.claim('marks', { state: 'ready', detail: 'No mark picked yet' }))
       const outbox = this.outbox = new Outbox({ store, effects, sources, commands, marks, paused: () => this.paused() })
       const { assessor, executor } = this
       const policy = () => settingsPolicy(store.settings(), sources, { degraded: this.router.degraded() })
@@ -190,27 +165,9 @@ export class Runtime extends Service implements SourceHost {
       const activity: { lastEventAt?: number; lastHumanAt?: number; humanTriggers: number } = { humanTriggers: 0 }
       const engine = this.engine = new Engine({ repo: store, scope: sources, policy, assessor, executor,
         gestures: new Gestures(store, Date.now, () => store.settings().policy.gestures),
-        outbox, prepareTicket: (ticket, outcome) => executor.prepare(ticket, outcome), emit: event => {
-          activity.lastEventAt = Date.parse(event.at)
-          if (event.type === 'trigger.received' && store.triggers.get(event.data.triggerId)?.human) {
-            activity.lastHumanAt = activity.lastEventAt
-            activity.humanTriggers += 1
-          }
-          // Notify the main Session only about domain events it did not initiate itself.
-          const notice = this.quiet ? undefined : eventNotice(event, id => store.tickets.get(id))
-          if (notice) sessions.notify(...notice)
-          // A person's message that reached an open ticket is the ticket's; the main Session hears of it in the same transaction,
-          // and of one for an ended ticket once it resumes, unless it routed the message there itself.
-          const followed = !this.quiet && (event.type === 'trigger.received' || event.type === 'ticket.resumed' || event.type === 'trigger.followup')
-          const followup = followed ? followupNotice(store, sources, event.data.triggerId) : undefined
-          if (followup) sessions.relay(followup.id, followup.text)
-          // Notify the ticket's conversations whenever it ends via a pull request.
-          const ended = event.type === 'ticket.ended' ? store.tickets.get(event.data.ticketId) : undefined
-          if (ended && setup.configured()) {
-            const request = store.triggers.get(ended.origin.triggerId)?.text ?? ''
-            for (const message of pullEndNotices(ended, request, setup.deployment.repository)) outbox.send(message)
-          }
-        } })
+        outbox, prepareTicket: (ticket, outcome) => executor.prepare(ticket, outcome),
+        emit: event => this.announce(event, { store, sources, sessions, outbox, activity,
+          configured: () => setup.configured(), repository: () => setup.deployment.repository }) })
       // Update the `evals` health entry on every pass if an evaluation failed as unavailable within the last hour.
       const evals = board.claim('evals', { state: 'ready', detail: 'No unavailable Eval in the last hour' })
       // After the engine: routing only needs the settings, the health board, the main Session id, and the DSH LLM service.
@@ -235,6 +192,66 @@ export class Runtime extends Service implements SourceHost {
       throw error
     }
   }
+  /**
+   * The emoji picker the Outbox calls. Its account and model come from the Marks settings on every pick, falling back to
+   * the environment; without either it stays quiet and a Channel draws its own mark.
+   */
+  private reactionChooser(store: Store, health: HealthEntry): ReactionChooser {
+    const account = () => {
+      const config = store.settings().marks
+      return { config, account: config.account || process.env.CLOUDFLARE_ACCOUNT_ID || '',
+        token: config.token || process.env.CLOUDFLARE_WORKERS_AI_API_KEY || process.env.CLOUDFLARE_API_KEY || '' }
+    }
+    const chooser: ReactionChooser = { pick: async message => {
+      const { config, account: accountId, token } = account()
+      if (!config.enabled) {
+        health.set({ state: 'paused', detail: 'Mark picking is off', at: new Date().toISOString() })
+        return undefined
+      }
+      if (!accountId || !token) {
+        health.set({ state: 'paused', detail: 'Set the Cloudflare account and token in the Marks settings, or in CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_WORKERS_AI_API_KEY',
+          at: new Date().toISOString() })
+        return undefined
+      }
+      return new ReactionPicker({ store, health }, { account: accountId, token, model: config.model, timeoutMs: config.timeoutMs }).pick(message)
+    } }
+    // Report the starting state once; a later save is reflected by the next pick.
+    const initial = account()
+    if (!initial.config.enabled) health.set({ state: 'paused', detail: 'Mark picking is off', at: new Date().toISOString() })
+    else if (!initial.account || !initial.token) health.set({ state: 'paused',
+      detail: 'Set the Cloudflare account and token in the Marks settings', at: new Date().toISOString() })
+    else health.set({ state: 'ready', detail: 'Ready to pick an emoji', at: new Date().toISOString() })
+    return chooser
+  }
+
+  /**
+   * What the main Session hears of a domain event: a notice, a follow-up relay, and the chat messages a Ticket's end sends.
+   * Held back while the main Session is carrying out its own command (`quiet`), so it is not told what it just did.
+   */
+  private announce(event: DomainEvent, deps: { store: Store; sources: SourceRegistry; sessions: Sessions; outbox: Outbox;
+    activity: { lastEventAt?: number; lastHumanAt?: number; humanTriggers: number }; configured: () => boolean; repository: () => string }): void {
+    const { store, sources, sessions, outbox, activity } = deps
+    activity.lastEventAt = Date.parse(event.at)
+    if (event.type === 'trigger.received' && store.triggers.get(event.data.triggerId)?.human) {
+      activity.lastHumanAt = activity.lastEventAt
+      activity.humanTriggers += 1
+    }
+    // Notify the main Session only about domain events it did not initiate itself.
+    const notice = this.quiet ? undefined : eventNotice(event, id => store.tickets.get(id))
+    if (notice) sessions.notify(...notice)
+    // A person's message that reached an open ticket is the ticket's; the main Session hears of it in the same transaction,
+    // and of one for an ended ticket once it resumes, unless it routed the message there itself.
+    const followed = !this.quiet && (event.type === 'trigger.received' || event.type === 'ticket.resumed' || event.type === 'trigger.followup')
+    const followup = followed ? followupNotice(store, sources, event.data.triggerId) : undefined
+    if (followup) sessions.relay(followup.id, followup.text)
+    // Notify the ticket's conversations whenever it ends via a pull request.
+    const ended = event.type === 'ticket.ended' ? store.tickets.get(event.data.ticketId) : undefined
+    if (ended && deps.configured()) {
+      const request = store.triggers.get(ended.origin.triggerId)?.text ?? ''
+      for (const message of pullEndNotices(ended, request, deps.repository())) outbox.send(message)
+    }
+  }
+
   get health(): Readonly<Record<string, Health>> { return this.board.all }
   /** Aborted when dsh-superagent stops or loses its state directory lock, cancelling running reads and subprocesses. */
   get lifetime(): AbortSignal { return this.stopped.signal }
