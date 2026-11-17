@@ -16,7 +16,7 @@ import { ReasoningEffortId } from '@deepseek-ai/dsh-llm'
 import { appendPluginRecord } from '@deepseek-ai/dsh-session'
 import type { HealthEntry } from '../infra/health.ts'
 import type { RoleModel, Settings } from '../policy/index.ts'
-import type { Store } from './store.ts'
+import type { Store } from './store/index.ts'
 
 declare module '@deepseek-ai/dsh-session' {
   interface PluginRecordMap {

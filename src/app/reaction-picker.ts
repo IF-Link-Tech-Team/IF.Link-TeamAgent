@@ -4,7 +4,7 @@ import type { GestureIntent, OutboundMessage, Trigger } from '../core/index.ts'
 import { FEISHU_EMOJIS, isFeishuEmoji } from '../feishu-emojis.ts'
 import type { HealthEntry } from '../infra/health.ts'
 import { threadKey } from '../core/index.ts'
-import type { Store } from './store.ts'
+import type { Store } from './store/index.ts'
 
 /** The Cloudflare Workers AI account and token the pick needs; without both the pick is skipped and a Channel keeps its own mark. */
 export interface ReactionAccount { account: string; token: string }

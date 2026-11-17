@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { afterEach, beforeEach, expect, it } from 'vitest'
-import { SCHEMA_VERSION, Store } from '../src/app/store.ts'
+import { SCHEMA_VERSION, Store } from '../src/app/store/index.ts'
 import type { Decision, Ticket, Trigger } from '../src/core/index.ts'
 import { feishu, startRuntime } from './fixtures/host.ts'
 

@@ -19,7 +19,7 @@ import type { PromptVersion, Prompts } from './prompts.ts'
 import type { Sessions } from './sessions.ts'
 import type { Settings } from './settings.ts'
 import { KV } from '../kv.ts'
-import type { Store } from './store.ts'
+import type { Store } from './store/index.ts'
 import type { TextCache } from './cache.ts'
 
 /** Resource descriptors exposed via orchestrator_read, marking which resources worker sessions may also read for their own ticket. */

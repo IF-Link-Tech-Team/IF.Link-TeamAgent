@@ -2,7 +2,7 @@
 import { isOpen, threadKey, ticketStage, type AcceptMode, type AdmissionCell, type MandateBasis, type Ticket,
   type TicketStage } from '../../core/index.ts'
 import { workerSessionId } from '../../executor/dsh.ts'
-import type { Store } from '../store.ts'
+import type { Store } from '../store/index.ts'
 import { channelLink, decisionView, newestFirst, page, snapshot, threadSummary, ticketLine, type Snapshot,
   type ViewDeps } from './records.ts'
 import { markdown, preview } from './text.ts'

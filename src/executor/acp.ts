@@ -12,7 +12,7 @@ import type { Assignment, EngineForExecutor, Executor, Ticket, TicketInput, Trig
 import type { Machine } from '../deployment.ts'
 import type { RuntimeProfile, Settings } from '../policy/index.ts'
 import { KV } from '../kv.ts'
-import type { Store } from '../app/store.ts'
+import type { Store } from '../app/store/index.ts'
 import { Later, type Effects } from '../app/effects.ts'
 import type { Variable } from '../app/execution-environment.ts'
 import type { Prompts } from '../app/prompts.ts'

@@ -2,6 +2,7 @@
 import { z } from 'zod'
 import { key, type ChannelRef, type Trigger } from '../core/index.ts'
 import type { FeishuMessage, FeishuRef } from './feishu-read.ts'
+import type { SourceContext } from './host.ts'
 
 export const SOURCE = 'feishu'
 /** Constructs a Feishu reply channel address; records `direct` explicitly because both group and direct chat IDs start with `oc_`. */
@@ -76,6 +77,15 @@ export function historyEvent(message: HistoricalMessage, chatId: string, direct:
     sender_id: message.sender.id, sender_type: message.sender.sender_type === 'user' ? 'user' : 'bot', content: historyText(message),
     mentions: message.mentions ?? [], root_id: message.root_id, parent_id: message.parent_id, thread_id: message.thread_id,
     message_app_link: message.message_app_link }
+}
+/**
+ * Whether a message read from history enters intake. Another app's broadcast that names nobody is dropped — it is the
+ * bulk of what history recovers, and the Policy ignores it — while a message that addresses this bot, or comes from a
+ * bot the Policy lists, still enters.
+ */
+export function admitsBackfill(ctx: SourceContext, trigger: Trigger): boolean {
+  if (trigger.human || trigger.addressed || trigger.actor.id === '') return true
+  return ctx.policyBots().some(bot => bot.id === trigger.actor.id)
 }
 /**
  * Adapts a topic-page message into the live-event schema, falling back to `root` when Feishu omits `root_id` on replies;

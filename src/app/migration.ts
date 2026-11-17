@@ -13,7 +13,7 @@ import { autoMergeThreshold, teamDefaults } from './context.ts'
 import { PromptConfigSchema, type PromptConfig, type PromptVersion } from './prompts.ts'
 import type { EffectKind, EffectPayloads } from './effects.ts'
 import { promptsNotice, settingsNotice, subscriptionNotice } from './notices.ts'
-import type { SettingsVersion, Store } from './store.ts'
+import type { SettingsVersion, Store } from './store/index.ts'
 import { Versions } from './versions.ts'
 import { KV, type Key } from '../kv.ts'
 

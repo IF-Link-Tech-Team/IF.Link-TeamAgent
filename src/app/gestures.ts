@@ -1,7 +1,7 @@
 /** Keeping a chat's pace of social reactions: a person is not answered twice in a row, and a chat gets few. */
 import type { Gesture, GestureBudget, Trigger } from '../core/index.ts'
 import { KV } from '../kv.ts'
-import type { Store } from './store.ts'
+import type { Store } from './store/index.ts'
 
 /** The default pace: how long a person waits before the agent may react to them again, and how many a chat gets in an hour. */
 export const PERSON_MINUTES = 30, PER_HOUR = 2

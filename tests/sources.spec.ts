@@ -4,9 +4,9 @@ import { backfillChat, consumerRetry, feishuKind, feishuTriggerId, feishuRef, fe
   from '../src/sources/feishu.ts'
 import { KV } from '../src/kv.ts'
 import { sendFeishu } from '../src/sources/feishu-channel.ts'
-import { feishuChannel } from '../src/sources/feishu-trigger.ts'
+import { admitsBackfill, feishuChannel } from '../src/sources/feishu-trigger.ts'
 import { apply as applyFeishu, pollThreads as pollFeishuThreads } from '../src/sources/feishu.ts'
-import { admitsBackfill, catchUpGap, FEISHU_TIMING, feishuCache, historyFailureHealth, noteFeishuCalls, noteFeishuEvent,
+import { catchUpGap, FEISHU_TIMING, feishuCache, historyFailureHealth, noteFeishuCalls, noteFeishuEvent,
   requestFeishuCatchUp, resetFeishuLoops, runFeishu, sweepChatTopics, threadDue }
   from '../src/sources/feishu-loops.ts'
 import { feishuTiming } from '../src/sources/feishu-config.ts'
@@ -17,11 +17,11 @@ import { apply as applyGithub, githubKind, pollFailure, pollRound } from '../src
 import { pollThreads as pollGithubThreads } from '../src/sources/github.ts'
 import { SourceRegistry } from '../src/sources/registry.ts'
 import { cursorAt, POLL_HORIZON_MS } from '../src/sources/poll.ts'
-import { Store } from '../src/app/store.ts'
+import { Store } from '../src/app/store/index.ts'
 import { Commands, commandError, resetLarkCallStats } from '../src/infra/commands.ts'
 import { HealthBoard } from '../src/infra/health.ts'
 import { testDeployment } from './fixtures/deployment.ts'
-import { SettingsSchema, settingsPolicy } from '../src/policy.ts'
+import { SettingsSchema, settingsPolicy } from '../src/policy/index.ts'
 import { sourceContextOf, type SourceContextDeps } from '../src/app/source-context.ts'
 import { SetupError, type SetupProblem } from '../src/setup-errors.ts'
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'

@@ -1,7 +1,7 @@
 /** Read-only Store queries for views, tools, and Source polling. */
 import type { DatabaseSync, SQLInputValue } from 'node:sqlite'
 import type { Decision, Thread, Trigger } from '../core/index.ts'
-import type { Dropped, Receipt, TimelinePlace } from './store.ts'
+import type { Dropped, Receipt, TimelinePlace } from './store/index.ts'
 
 export function storeReads(db: DatabaseSync) {
   const values = <T>(sql: string, ...parameters: SQLInputValue[]): T[] => db.prepare(sql).all(...parameters).map(row => JSON.parse(String(row.value)) as T)

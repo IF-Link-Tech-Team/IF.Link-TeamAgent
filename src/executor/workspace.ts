@@ -5,7 +5,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { Ticket } from '../core/index.ts'
 import type { Machine } from '../deployment.ts'
 import { runAsWorker, verifyDirectory } from '../infra/environment.ts'
-import type { Store } from '../app/store.ts'
+import type { Store } from '../app/store/index.ts'
 import type { Variable } from '../app/execution-environment.ts'
 
 /** How long a ticket's prepare command may run before its launch fails. */

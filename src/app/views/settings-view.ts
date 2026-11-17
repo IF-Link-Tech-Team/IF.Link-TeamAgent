@@ -4,7 +4,7 @@ import { KV } from '../../kv.ts'
 import { policyVersion, SETTINGS_MASK } from '../../policy/index.ts'
 import type { SourceRegistry } from '../../sources/registry.ts'
 import { declaredVariables, executionRoot } from '../execution-environment.ts'
-import type { Store } from '../store.ts'
+import type { Store } from '../store/index.ts'
 import type { RouteState } from '../model-router.ts'
 import { problemOf, sourceHealth, type HealthMap, type SetupState } from './sources.ts'
 

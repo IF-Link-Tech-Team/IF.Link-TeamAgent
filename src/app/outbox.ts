@@ -5,7 +5,7 @@ import type { Commands } from '../infra/commands.ts'
 import { checkedImText } from '../infra/text.ts'
 import type { SourceRegistry } from '../sources/registry.ts'
 import { FAILURES_BEFORE_ERROR, Later, type Effects } from './effects.ts'
-import type { Store } from './store.ts'
+import type { Store } from './store/index.ts'
 
 export interface OutboxDeps {
   readonly store: Pick<Store, 'atomic' | 'receipts'>

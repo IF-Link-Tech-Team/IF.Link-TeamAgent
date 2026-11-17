@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { Effects, Later } from '../src/app/effects.ts'
-import { Store } from '../src/app/store.ts'
+import { Store } from '../src/app/store/index.ts'
 import { HealthBoard } from '../src/infra/health.ts'
 import { deferred } from './fixtures/async.ts'
 

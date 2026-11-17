@@ -149,7 +149,7 @@ Trigger and Thread `meta` belong to the Source. The core does not interpret them
 
 ### Store
 
-`Store` (`src/app/store.ts`) owns one SQLite database. Runtime acquires the directory lock before opening it, preventing a second process from migrating or writing the same state.
+`Store` (`src/app/store/index.ts`) owns one SQLite database. Runtime acquires the directory lock before opening it, preventing a second process from migrating or writing the same state.
 
 Its interfaces are grouped by purpose:
 
@@ -330,7 +330,13 @@ Some generic modules still refer directly to GitHub or Feishu:
 | `src/app/passes.ts` | Passes, the pass scheduler |
 | `src/app/outbox.ts` | The Outbox: the Engine's `Outbox` port, the receipts and the `reply` effects that send them |
 | `src/app/notices.ts` | The main Session's notices and relays: `eventNotice`, `reportRelay`, `resultRelay` and `followupRelay` |
-| `src/app/store.ts` | The Store, and `Receipt`, a message of the outbox |
+| `src/app/store/index.ts`, `core.ts` | The Store itself: the schema, its facets wired together, `atomic` and `afterCommit`; `StoreCore` is what a facet may use |
+| `src/app/store/schema.ts` | The tables, the generated working-set columns, and the version check that refuses a database it cannot migrate |
+| `src/app/store/kv.ts` | The key-value table: typed records, deletes, and key families |
+| `src/app/store/search.ts` | The full-text index: writes on save, the derived rebuild on open, journal indexing, and the ranked queries |
+| `src/app/store/settings.ts` | Versioned settings: the current snapshot, each block's revision, saves, and history |
+| `src/app/store/domain.ts` | The aggregates as rows — Triggers, Threads, Tickets, Decisions — with the thread and search indexes |
+| `src/app/store/outbox.ts` | Outbox receipts, and `Receipt`, a message of the outbox |
 | `src/app/store-read.ts` | `storeReads`: the Store's read queries for the views, the tools and the Sources' polls, which never write |
 | `src/app/migration.ts` | The schema 11 migration: one step from schema 10 that writes every stored record in its current shape |
 | `src/app/effects.ts` | Effects |
@@ -392,8 +398,15 @@ Some generic modules still refer directly to GitHub or Feishu:
 | `src/sources/clawchat-protocol.ts` | The ClawChat agent-side protocol: invite redemption and token refresh, the Protocol v2 WebSocket with its heartbeat and acks, and the frames as inbound messages |
 | `src/sources/feishu.ts` | The Feishu kind and plugin entry, exported as `./feishu-watch` |
 | `src/sources/feishu-config.ts` | The Feishu Source's configuration schema and the sweep cadences (`feishuTiming`), kept apart from the plugin entry so the loops can read them without a cycle |
-| `src/sources/feishu-trigger.ts` | Feishu messages as Triggers, by one rule for live events, history pages and topic pages |
-| `src/sources/feishu-loops.ts` | The Feishu loops: the event consumer, history recovery, chat names and polling of subscribed topics |
+| `src/sources/feishu-trigger.ts` | Feishu messages as Triggers, by one rule for live events, history pages and topic pages; `admitsBackfill`, whether a message read from history enters intake |
+| `src/sources/feishu-loops.ts` | The Feishu loops' entry and barrel: `runFeishu` starts the event consumer, the history sweep and the chat-name refresh, and re-exports the `feishu/` modules below |
+| `src/sources/feishu/state.ts` | The loops' shared state and small context helpers: `FEISHU_TIMING`, the in-memory activity markers and the catch-up request (`resetFeishuLoops`, `requestFeishuCatchUp`, `noteFeishuEvent`, `takeCatchUpRequest`), `pruneActivity`, `fastChats`, `feishuCache`, and `enabled`, `available`, `bot`, `receive`, `chatLink` |
+| `src/sources/feishu/events.ts` | The live event consumer: `watch`, which runs `consume` while the Source is enabled, and `consumerRetry` |
+| `src/sources/feishu/history.ts` | History recovery: `backfillLoop`, the two-tier chat sweep, `sweepChat`, `backfillChat`, `catchUpGap` and `sweepableChats` |
+| `src/sources/feishu/topics.ts` | Topic sweeps: `TopicMode`, `SweepOptions`, `sweepChatTopics`, `scanTopics`, and `scanContainer`, the page reader the chat and topic sweeps share |
+| `src/sources/feishu/names.ts` | `refreshChatNames` and `chatNamesLoop`: the joined-chat names the panel shows |
+| `src/sources/feishu/quota.ts` | The Feishu call record: `noteFeishuCalls`, `callDay` and `historyFailureHealth` |
+| `src/sources/feishu/threads.ts` | Subscribed thread polling: `threadRef`, `threadDue`, `pollThreads` and `pollThread` |
 | `src/sources/feishu-channel.ts` | The Feishu Channel: topic replies, `sent` or `gone` |
 | `src/sources/feishu-read.ts` | The `feishu/` reads of a Trigger's message, its root, parent and topic, and `feishuThreadContext`, which gives them to assessments with their images |
 | `src/sources/admission-context.ts` | The bounded window an assessment starts from: the first pages of a Trigger's Thread, read through its kind, and the messages around the Trigger |

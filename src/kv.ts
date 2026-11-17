@@ -3,7 +3,7 @@
  * Readers and writers refer to a record by its entry here so each key is spelled once with its value type.
  */
 import type { PromptVersion } from './app/prompts.ts'
-import type { SettingsVersion } from './app/store.ts'
+import type { SettingsVersion } from './app/store/index.ts'
 import type { SettingsSave } from './policy/index.ts'
 import type { Retry } from './sources/github.ts'
 

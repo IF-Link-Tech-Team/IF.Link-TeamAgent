@@ -1,6 +1,6 @@
 /** Dispatches one Assignment to the worker runtime its ticket was routed to, while keeping the existing DSH path intact. */
 import type { AssessmentOutcome, Assignment, Executor, Ticket } from '../core/index.ts'
-import type { Store } from '../app/store.ts'
+import type { Store } from '../app/store/index.ts'
 import type { Effects } from '../app/effects.ts'
 import { chooseRoute, type DispatchRoute } from '../app/dispatch.ts'
 import type { DshExecutor } from './dsh.ts'
