@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { Engine, MemoryRepositories, UserError, followupOwners, key, runningAssignment, ticketOutcome, ticketStage,
-  waitsForPerson } from '../src/core/index.ts'
+  blockedOnPerson } from '../src/core/index.ts'
 import type { Assessor, Assignment, Candidate, EngineOptions, Executor, OutboundMessage, Outcome, Policy, Ticket, Trigger } from '../src/core/index.ts'
 
 const member = { source: 'chat', id: 'alice' }
@@ -171,7 +171,7 @@ describe('eval', () => {
     // A candidate the assessor's Session has not taken does not expire.
     h.tick(600); h.pump()
     expect(h.engine.candidate('1')?.evalId).toBe(h.requests[0]!.evalId)
-    const deliver = () => { h.engine.candidateDelivered(h.requests.at(-1)!.evalId) }
+    const deliver = () => { h.engine.candidateReached(h.requests.at(-1)!.evalId) }
     deliver()
     h.tick(59); h.pump()
     expect(h.requests).toHaveLength(1)
@@ -476,7 +476,7 @@ describe('context threads and notes', () => {
     h.engine.report(follower, { state: 'blocked', summary: 'needs a decision' })
     h.engine.receive(trigger('4')); h.pump()
     expect(h.requests.at(-1)!.triggers.map(item => item.id)).toEqual(['3', '4'])
-    expect(waitsForPerson(h.repo.tickets.get(follower)!)).toBe(true)
+    expect(blockedOnPerson(h.repo.tickets.get(follower)!)).toBe(true)
   })
   it('sends a message to Eval when the ticket it reached cannot resume and only a ticket following its Thread for context is left', () => {
     const h = harness()
@@ -742,7 +742,7 @@ describe('pause', () => {
   it('lets no Eval expire while processing is paused, and moves its deadline on by the pause\'s length', () => {
     const h = harness()
     h.engine.receive(trigger('1')); h.pump()
-    h.engine.candidateDelivered(h.requests[0]!.evalId)
+    h.engine.candidateReached(h.requests[0]!.evalId)
     const deadline = Date.parse(h.repo.threads.get('chat:t1')!.evaluating!.deadline)
     h.tick(30); h.setPaused(true); h.pump()
     // Paused past the deadline, the Eval waits.
@@ -988,19 +988,19 @@ describe('automatic input', () => {
     const ticketId = accepted(h).ticketId!
     const ticket = () => h.repo.tickets.get(ticketId)!
     h.engine.report(ticketId, { state: 'blocked', summary: 'needs a decision' })
-    expect(waitsForPerson(ticket())).toBe(true)
+    expect(blockedOnPerson(ticket())).toBe(true)
     expect(ticketStage(ticket())).toEqual({ stage: 'person', action: 'blocked' })
     // The worker has the person's reply, so the stale blocked report no longer holds the ticket.
     h.tick(1); h.engine.receive(trigger('2', { actor: guest })); h.settle()
-    expect(waitsForPerson(ticket())).toBe(false)
+    expect(blockedOnPerson(ticket())).toBe(false)
     expect(ticketStage(ticket())).toEqual({ stage: 'working' })
     h.tick(1); h.engine.report(ticketId, { state: 'failed', summary: 'broke' })
-    expect(waitsForPerson(ticket())).toBe(true)
+    expect(blockedOnPerson(ticket())).toBe(true)
     h.tick(1); h.engine.report(ticketId, { state: 'progress', summary: 'found a way' })
-    expect(waitsForPerson(ticket())).toBe(false)
+    expect(blockedOnPerson(ticket())).toBe(false)
     h.tick(1); h.engine.report(ticketId, { state: 'blocked', summary: 'needs access' })
     h.engine.retryTicket(ticketId)
-    expect(waitsForPerson(ticket())).toBe(false)
+    expect(blockedOnPerson(ticket())).toBe(false)
   })
   it('launches a failed launch again for a person\'s message, but not for a Policy change', () => {
     const h = harness()
@@ -1308,9 +1308,9 @@ describe('gaps', () => {
     const h = harness()
     h.engine.receive(trigger('1')); h.pump()
     const evalId = h.requests[0]!.evalId
-    h.engine.candidateDelivered(evalId)
+    h.engine.candidateReached(evalId)
     const deadline = h.repo.threads.get('chat:t1')!.evaluating!.deadline
-    h.tick(30); h.engine.candidateDelivered(evalId)
+    h.tick(30); h.engine.candidateReached(evalId)
     expect(h.repo.threads.get('chat:t1')!.evaluating!.deadline).toBe(deadline)
     expect(h.engine.reevaluate('1')).toBe(false)
     // A Trigger that arrives meanwhile queues behind the expired one, and the fresh Eval takes both in that order.

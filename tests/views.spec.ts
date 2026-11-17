@@ -251,9 +251,9 @@ it('shows a follow-up that reached a ticket as delivered, the tickets that hande
   store.triggers.save(message('f2', { source: 'feishu', id: 'ou_alice' }))
   store.triggers.saveDisposition('f2', { fanout: ['t1'], requeued: true, handbacks: [{ ticketId: 't1', reason: 'Asks for a new feature', at }], at })
   const view = snapshot(host)
-  expect(triggerView(view, store.triggers.get('f1')!).disposition).toMatchObject({ delivered: true, queued: false, handbacks: [] })
+  expect(triggerView(view, store.triggers.get('f1')!).disposition).toMatchObject({ workerDecides: true, queued: false, handbacks: [] })
   // A Trigger handed back goes to Eval as any message on its Thread; the Ticket that handed it back is named by its title once it has one.
-  expect(triggerView(view, store.triggers.get('f2')!).disposition).toMatchObject({ delivered: false,
+  expect(triggerView(view, store.triggers.get('f2')!).disposition).toMatchObject({ workerDecides: false,
     handbacks: [{ ticketId: 't1', title: 't1', reason: 'Asks for a new feature' }] })
   store.threads.save({ key: 'github:7', ref: { source: 'github', id: '7' }, createdAt: at, subscriptions: ['t1'], context: ['t1'],
     correlated: [], pending: [], meta: {} })
@@ -289,10 +289,10 @@ it('offers a person to send a follow-up to Eval while a ticket decides it, or on
   store.triggers.save(message('f1', { source: 'feishu', id: 'ou_alice' }))
   store.triggers.saveDisposition('f1', { fanout: ['t1'], at })
   const row = () => triggerView(snapshot(host), store.triggers.get('f1')!)
-  expect(row()).toMatchObject({ actions: { requeue: true }, disposition: { delivered: true } })
+  expect(row()).toMatchObject({ actions: { requeue: true }, disposition: { workerDecides: true } })
   // A ticket that ended after its worker had it leaves it to nobody: a person may still send it to Eval.
   store.tickets.save({ ...store.tickets.get('t1')!, ended: { at, by: 'executor', reason: 'done', outcome: 'completed' } })
-  expect(row()).toMatchObject({ actions: { requeue: true }, disposition: { delivered: false } })
+  expect(row()).toMatchObject({ actions: { requeue: true }, disposition: { workerDecides: false } })
   // Not once its worker acknowledged it, which took it up; a stop on it decided only the ticket's work.
   store.triggers.saveDisposition('f1', { fanout: ['t1'], acked: ['t1'], at })
   expect(row().actions.requeue).toBe(false)
@@ -320,7 +320,7 @@ it('reads each ticket a page\'s follow-ups reached once, and nothing for a messa
   }
   const view = snapshot(host)
   const tickets = vi.spyOn(store.tickets, 'get')
-  expect(['f1', 'f2', 'f3'].map(id => triggerView(view, store.triggers.get(id)!).disposition.delivered)).toEqual([true, true, true])
+  expect(['f1', 'f2', 'f3'].map(id => triggerView(view, store.triggers.get(id)!).disposition.workerDecides)).toEqual([true, true, true])
   expect(tickets).toHaveBeenCalledOnce()
   tickets.mockRestore()
   // A message the ticket handed back is decided by no ticket, which needs no read.

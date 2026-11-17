@@ -1,6 +1,6 @@
 /** Trigger ingestion, thread correlation, subscription fan-out, and evaluation queuing. */
 import { key } from './ids.ts'
-import { isoTime, liveTicket, threadKey } from './model.ts'
+import { isoTime, isOpen, threadKey } from './model.ts'
 import type { Ticket, Trigger } from './model.ts'
 import { EnginePart, type EngineOptions } from './part.ts'
 import type { Tickets } from './tickets.ts'
@@ -41,7 +41,7 @@ export class Intake extends EnginePart {
         // threads when it resumes), and a human-stopped ticket receives nothing because its Mandate was withdrawn.
         const followed = !!thread.context?.includes(ticketId)
         const resumes = trigger.human && ticket?.ended?.by !== 'human' && !followed
-        if (!ticket || (!liveTicket(ticket) && !resumes)) continue
+        if (!ticket || (!isOpen(ticket) && !resumes)) continue
         reached.set(ticketId, { ticket, context: followed && (reached.get(ticketId)?.context ?? true) })
       }
       this.repo.threads.save(thread)

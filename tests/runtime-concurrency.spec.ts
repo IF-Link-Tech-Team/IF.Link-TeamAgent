@@ -1,6 +1,6 @@
 /** Concurrent runtime behavior across overlapping triggers, deliveries, and worker launches. */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { latestAssignment, waitsForPerson, type Ticket, type Trigger } from '../src/core/index.ts'
+import { latestAssignment, blockedOnPerson, type Ticket, type Trigger } from '../src/core/index.ts'
 import { Later } from '../src/app/effects.ts'
 import { reportRelay } from '../src/app/notices.ts'
 import { WorkerSlots, inputMessage, mandateInstructions, ticketExecution, transient, triggerMessage } from '../src/executor/dsh.ts'
@@ -804,7 +804,7 @@ it('reports a worker waiting when its turn ends after a person answered its bloc
   await new Promise(resolve => setTimeout(resolve, 5))
   h.runtime.receive(feishu('2', '蓝色', { mentions: [], root_id: 'om_1' })); await h.runtime.idle()
   const ticket = () => h.runtime.store.tickets.get(one.ticket.id)!
-  expect(waitsForPerson(ticket())).toBe(false)
+  expect(blockedOnPerson(ticket())).toBe(false)
   h.agents.get(one.sessionId)!.status = 'idle'
   h.ctx.emit('agent/status', { agent: h.agents.get(one.sessionId), status: 'idle' } as never)
   await vi.waitFor(() => expect(latestAssignment(ticket())?.report?.state).toBe('waiting'))

@@ -7,7 +7,7 @@ import { Readable, Writable } from 'node:stream'
 import { client, ndJsonStream } from '@agentclientprotocol/sdk'
 import type { ClientConnection, ContentBlock, RequestPermissionResponse, SessionNotification } from '@agentclientprotocol/sdk'
 import type { Context } from '@deepseek-ai/cordis'
-import { key, latestAssignment, liveTicket, runningAssignment, waitsForPerson } from '../core/index.ts'
+import { key, latestAssignment, isOpen, runningAssignment, blockedOnPerson } from '../core/index.ts'
 import type { Assignment, EngineForExecutor, Executor, Ticket, TicketInput, Trigger } from '../core/index.ts'
 import type { Machine } from '../deployment.ts'
 import type { RuntimeProfile, Settings } from '../policy.ts'
@@ -154,7 +154,7 @@ export class AcpExecutor {
   async launchNow({ ticketId, assignmentId }: { ticketId: string; assignmentId: string }): Promise<void> {
     const ticket = this.host.store.tickets.get(ticketId)
     const assignment = ticket && latestAssignment(ticket)
-    if (!ticket || !liveTicket(ticket) || assignment?.id !== assignmentId || assignment.state !== 'pending') return
+    if (!ticket || !isOpen(ticket) || assignment?.id !== assignmentId || assignment.state !== 'pending') return
     this.host.slots.reserve(ticketId, 'launch')
     try { await this.launch(ticket, assignment) }
     catch (error) {
@@ -166,7 +166,7 @@ export class AcpExecutor {
   /** Hands the ticket's waiting Inputs to its running session, or queues them behind the current turn. */
   async deliverNow(ticketId: string): Promise<void> {
     const ticket = this.host.store.tickets.get(ticketId)
-    const assignment = ticket && liveTicket(ticket) ? runningAssignment(ticket) : undefined
+    const assignment = ticket && isOpen(ticket) ? runningAssignment(ticket) : undefined
     const run = this.runs.get(ticketId)
     if (!ticket || !assignment || !run) throw new Later('The worker is not running yet')
     for (const id of [...ticket.undelivered]) {
@@ -197,7 +197,7 @@ export class AcpExecutor {
       if (!ticket.execution?.runtime || ticket.execution.runtime === 'dsh') continue
       const running = runningAssignment(ticket), latest = latestAssignment(ticket)
       if (running) { this.host.engine.assignmentInterrupted(ticket.id, running.id); continue }
-      if (latest?.state === 'pending' && !waitsForPerson(ticket)) this.host.effects.enqueue('launch', latest.id,
+      if (latest?.state === 'pending' && !blockedOnPerson(ticket)) this.host.effects.enqueue('launch', latest.id,
         { ticketId: ticket.id, assignmentId: latest.id })
     }
   }
@@ -216,7 +216,7 @@ export class AcpExecutor {
       if (this.host.closing()) throw new Error('dsh-superagent is stopping')
       if (this.host.paused()) throw new Later('Processing is paused')
       const stored = this.host.store.tickets.get(ticket.id)
-      return !!stored && liveTicket(stored) && latestAssignment(stored)?.id === assignment.id
+      return !!stored && isOpen(stored) && latestAssignment(stored)?.id === assignment.id
     }
     const settings = this.host.store.settings()
     const runtime = ticket.execution?.runtime ?? 'dsh'
@@ -351,7 +351,7 @@ export class AcpExecutor {
     const startedAt = now()
     const timer = setTimeout(() => {
       const ticket = this.host.store.tickets.get(run.ticketId)
-      if (ticket && liveTicket(ticket)) this.host.engine.report(run.ticketId, { state: 'waiting',
+      if (ticket && isOpen(ticket)) this.host.engine.report(run.ticketId, { state: 'waiting',
         summary: `The turn exceeded its ${this.wallClock(run)}-minute wall-clock limit and was stopped.` })
       void this.close(run, 'The turn exceeded its wall-clock limit')
     }, this.wallClock(run) * 60_000)
@@ -373,7 +373,7 @@ export class AcpExecutor {
   /** Maps a finished turn to `turnEnded`, read Inputs, and a synthesized waiting report when no status was sent. */
   private async turnEnded(run: AcpRun, claimed: string[], startedAt: string): Promise<void> {
     const ticket = this.host.store.tickets.get(run.ticketId)
-    if (!ticket || !liveTicket(ticket) || runningAssignment(ticket)?.id !== run.assignmentId) return
+    if (!ticket || !isOpen(ticket) || runningAssignment(ticket)?.id !== run.assignmentId) return
     this.host.engine.turnEnded(run.ticketId, run.assignmentId)
     if (claimed.length) this.host.engine.inputsRead(run.ticketId, claimed)
     const report = latestAssignment(ticket)?.report
@@ -402,7 +402,7 @@ export class AcpExecutor {
   private fail(ticketId: string, detail: string): void {
     const ticket = this.host.store.tickets.get(ticketId)
     const assignment = ticket && runningAssignment(ticket)
-    if (ticket && assignment && liveTicket(ticket) && !this.host.closing()) {
+    if (ticket && assignment && isOpen(ticket) && !this.host.closing()) {
       this.host.engine.report(ticketId, { state: 'failed', summary: detail.slice(0, 1000) })
     }
     this.host.health.set({ state: 'error', detail })

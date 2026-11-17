@@ -1,6 +1,6 @@
 /** Pull request binding, lifecycle observation, and terminal IM notification helpers. */
 import { z } from 'zod'
-import { key, liveTicket, type Follow, type OutboundMessage, type ThreadFact, type Ticket } from '../core/index.ts'
+import { key, isOpen, type Follow, type OutboundMessage, type ThreadFact, type Ticket } from '../core/index.ts'
 import type { Deployment } from '../deployment.ts'
 import { sameName } from '../infra/text.ts'
 import type { SourceContext } from './host.ts'
@@ -34,7 +34,7 @@ const AUTO_MERGE_ON: ThreadFact = { label: { zh: '自动合并', en: 'Auto-merge
  */
 export function claimPull(ctx: SourceContext, ticketId: string, pr: Pull): string | undefined {
   const ticket = ctx.tickets.get(ticketId)
-  if (!ticket || !liveTicket(ticket)) return 'Ticket ended because its PR was closed'
+  if (!ticket || !isOpen(ticket)) return 'Ticket ended because its PR was closed'
   const source = ctx.triggers.get(ticket.origin.triggerId)
   const started = source?.source === SOURCE && source.meta.isPr === true && source.meta.number === pr.number
   const opened = agentPull(pr, ctx.deployment) && ticketBranch(ticket, pr.head.ref)

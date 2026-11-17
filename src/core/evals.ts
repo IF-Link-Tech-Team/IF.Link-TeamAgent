@@ -1,8 +1,8 @@
 /** Evals: the Thread-level assessments of queued Triggers, and the Decisions they end with. */
 import { key } from './ids.ts'
 import { UserError } from './errors.ts'
-import { liveTicket, QUIET_BATCH, threadKey } from './model.ts'
-import type { Decision, DecisionKind, Evaluation, Gesture, Mandate, MandateBasis, Strength, Thread, Trigger } from './model.ts'
+import { isOpen, QUIET_BATCH, threadKey } from './model.ts'
+import type { Decision, DecisionKind, Eval, Gesture, Mandate, MandateBasis, Strength, Thread, Trigger } from './model.ts'
 import type { AssessmentOutcome, Candidate, Policy } from './ports.ts'
 import { said, type Reason } from './reasons.ts'
 import { EnginePart, type EngineOptions } from './part.ts'
@@ -41,16 +41,16 @@ export class Evals extends EnginePart {
     else if (evaluation.pausedAt) {
       evaluation.deadline = new Date(Date.parse(evaluation.deadline) + Date.parse(now) - Date.parse(evaluation.pausedAt)).toISOString()
       delete evaluation.pausedAt
-    } else if (evaluation.delivered && evaluation.deadline <= now) { this.expire(thread); return }
+    } else if (evaluation.candidateReached && evaluation.deadline <= now) { this.expire(thread); return }
     else return
     this.repo.threads.save(thread)
   }
   /** An Eval's candidate reached the assessor's Session: its deadline counts from now. */
-  delivered(evalId: string, policy: Policy): void {
+  candidateReached(evalId: string, policy: Policy): void {
     const thread = this.repo.threads.active().find(item => item.evaluating?.id === evalId)
-    if (!thread?.evaluating || thread.evaluating.delivered) return
+    if (!thread?.evaluating || thread.evaluating.candidateReached) return
     const now = this.now()
-    thread.evaluating.delivered = now
+    thread.evaluating.candidateReached = now
     thread.evaluating.deadline = new Date(Date.parse(now) + policy.evalTimeoutMs).toISOString()
     this.repo.threads.save(thread)
   }
@@ -74,7 +74,7 @@ export class Evals extends EnginePart {
    * speak for themselves, and a queue that reaches the batch limit starts early so one judgement never spans a whole
    * conversation. See `docs/iflink/heartbeat-scheduler.md` and the measurement in the `quietSeconds` setting.
    */
-  waits(thread: Thread, policy: Policy): boolean {
+  quietWindowOpen(thread: Thread, policy: Policy): boolean {
     const quiet = policy.quietMs ?? 0
     if (quiet <= 0) return false
     if (thread.pending.length >= QUIET_BATCH) return false
@@ -89,12 +89,12 @@ export class Evals extends EnginePart {
     const thread = this.repo.threads.get(threadKeyValue)!
     const at = this.now()
     // A person's follow-up a ticket still decides is that ticket's: one an older version queued leaves the queue without a Decision.
-    const delivered = (id: string) => {
+    const workerDecides = (id: string) => {
       const trigger = this.repo.triggers.get(id)
       return !!trigger && this.owners(trigger).length > 0
     }
-    if (thread.pending.some(delivered)) {
-      const followups = thread.pending.filter(delivered)
+    if (thread.pending.some(workerDecides)) {
+      const followups = thread.pending.filter(workerDecides)
       thread.pending = thread.pending.filter(id => !followups.includes(id))
       this.repo.threads.save(thread)
       for (const triggerId of followups) this.emit('trigger.followup', { triggerId })
@@ -200,7 +200,7 @@ export class Evals extends EnginePart {
   }
   /**
    * Record that a ticket's Executor hands back a Trigger that reached it as beyond the ticket, and queue it for a fresh Eval
-   * when the ticket decided it and no other ticket still does (see `handBack`): the gate judges it as any message on its
+   * when the ticket decided it and no other ticket still does (see `recordHandback`): the gate judges it as any message on its
    * Thread, and its candidate carries the reasons, so no requeue notice comes before it. The ticket keeps its Subscription,
    * and hands a Trigger back once.
    * @returns whether it was queued: false while another ticket decides it, and for one the ticket did not decide.
@@ -209,7 +209,7 @@ export class Evals extends EnginePart {
     const ticket = this.require(ticketId)
     if (!ticket.inputs.some(input => input.kind === 'trigger' && input.triggerId === triggerId)) throw new UserError('notReached')
     if (this.repo.triggers.disposition(triggerId)?.handbacks?.some(item => item.ticketId === ticketId)) throw new UserError('handedBack')
-    return this.handBack(ticketId, this.repo.triggers.get(triggerId)!, reason)
+    return this.recordHandback(ticketId, this.repo.triggers.get(triggerId)!, reason)
   }
   /**
    * Marks an `unavailable` Decision dismissed so the overview lists it no more.
@@ -298,7 +298,7 @@ export class Evals extends EnginePart {
     const value = this.repo.triggers.get(triggerId)?.meta.allowRules
     return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : undefined
   }
-  private directEval(thread: Thread, trigger: Trigger, kind: AssessmentOutcome['kind'], ticketId?: string): Evaluation {
+  private directEval(thread: Thread, trigger: Trigger, kind: AssessmentOutcome['kind'], ticketId?: string): Eval {
     const policy = this.policy()
     const gate = policy.gate(trigger, thread, this.ticketsOnThread(thread))
     if (!gate.admissible) throw new UserError('notAdmissible', { reason: gate.reason })
@@ -309,7 +309,7 @@ export class Evals extends EnginePart {
       strength: gate.strength, actor: trigger.actor, basis: gate.basis, policyVersion: policy.version, startedAt: at, deadline: at }
   }
   /** Apply an outcome to an Eval of a Thread: the one in progress, or a gate-only one. */
-  private decideEval(thread: Thread, evaluation: Evaluation, outcome: AssessmentOutcome): Decision {
+  private decideEval(thread: Thread, evaluation: Eval, outcome: AssessmentOutcome): Decision {
     const audit = outcome.audit ? { audit: outcome.audit } : {}
     // Requeue if Policy changed without a live policyChanged call (such as across an upgrade or restart).
     if (this.policy().version !== evaluation.policyVersion) {
@@ -323,7 +323,7 @@ export class Evals extends EnginePart {
       reason: [...unassessed, ...reasonOf(outcome.reason)], ...audit })
     if (outcome.kind === 'stop') {
       const ticket = this.repo.tickets.get(outcome.ticketId)
-      if (!ticket || !liveTicket(ticket)) return this.finish(thread, evaluation, { kind: 'ignore', reason: [{ code: 'stopUnknown' }],
+      if (!ticket || !isOpen(ticket)) return this.finish(thread, evaluation, { kind: 'ignore', reason: [{ code: 'stopUnknown' }],
         ...audit })
       if (evaluation.strength !== 'explicit') return this.finish(thread, evaluation, { kind: 'ignore',
         reason: [{ code: 'stopNotExplicit' }], ...audit })
@@ -338,7 +338,7 @@ export class Evals extends EnginePart {
    * and a mark is drawn when the deployment's budget allows one; a refusal records why, so the panel shows the gesture the
    * chat did not get.
    */
-  private gesture(thread: Thread, evaluation: Evaluation, outcome: Extract<AssessmentOutcome, { kind: 'react' }>): Decision {
+  private gesture(thread: Thread, evaluation: Eval, outcome: Extract<AssessmentOutcome, { kind: 'react' }>): Decision {
     const trigger = this.repo.triggers.get(evaluation.triggerIds[0]!)
     const admit = !!trigger && (this.options.gestures?.admit(trigger, outcome.gesture) ?? true)
     const audit = outcome.audit ? { audit: outcome.audit } : {}
@@ -350,7 +350,7 @@ export class Evals extends EnginePart {
     return decision
   }
   /** Record an accept with the Mandate the Eval gives, and have Tickets create its ticket. */
-  private accept(thread: Thread, evaluation: Evaluation, outcome: Extract<AssessmentOutcome, { kind: 'accept' }>): Decision {
+  private accept(thread: Thread, evaluation: Eval, outcome: Extract<AssessmentOutcome, { kind: 'accept' }>): Decision {
     const at = this.now()
     const basis = { ...evaluation.basis, ...(outcome.rules ? { rules: outcome.rules } : {}) }
     const { strength, policyVersion, actor } = evaluation
@@ -362,7 +362,7 @@ export class Evals extends EnginePart {
     return decision
   }
   /** Record an Eval's Decision; the Thread's own Eval ends with it, while a gate-only one leaves the Thread's Eval going. */
-  private finish(thread: Thread, evaluation: Evaluation, outcome: Finished): Decision {
+  private finish(thread: Thread, evaluation: Eval, outcome: Finished): Decision {
     const decision = this.record(thread, evaluation, outcome)
     // Direct (gate-only) evaluations do not clear the thread's active evaluation.
     if (thread.evaluating?.id !== evaluation.id) return decision
@@ -371,7 +371,7 @@ export class Evals extends EnginePart {
     this.options.assessor.release?.(evaluation.id)
     return decision
   }
-  private record(thread: Thread, evaluation: Evaluation, outcome: Finished): Decision {
+  private record(thread: Thread, evaluation: Eval, outcome: Finished): Decision {
     const at = this.now()
     const decision: Decision = { id: key('decision', evaluation.id), evalId: evaluation.id, threadKey: thread.key, triggerIds: evaluation.triggerIds,
       policyVersion: evaluation.policyVersion, at, kind: outcome.kind, reason: outcome.reason, strength: evaluation.strength,

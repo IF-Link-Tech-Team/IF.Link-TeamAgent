@@ -1,6 +1,6 @@
 /** The domain Engine: the single entry point of the core, and the role interfaces its callers receive. */
 import { UserError } from './errors.ts'
-import { isoTime, liveTicket } from './model.ts'
+import { isoTime, isOpen } from './model.ts'
 import type { ChannelRef, Decision, PolicyEffect, ThreadRef, Ticket, Trigger } from './model.ts'
 import type { Candidate, Repositories } from './ports.ts'
 import type { EngineOptions } from './part.ts'
@@ -77,10 +77,10 @@ export class Engine {
     for (const thread of this.repo.threads.active()) if (thread.evaluating) this.repo.atomic(() => { this.evals.due(thread, policy) })
     if (policy.paused) return
     for (const ticket of this.repo.tickets.active()) {
-      if (!liveTicket(ticket) && ticket.undelivered.length) this.repo.atomic(() => { this.tickets.wake(ticket.id) })
+      if (!isOpen(ticket) && ticket.undelivered.length) this.repo.atomic(() => { this.tickets.wake(ticket.id) })
     }
     for (const thread of this.repo.threads.active()) {
-      if (!thread.pending.length || thread.evaluating || this.evals.waits(thread, policy)) continue
+      if (!thread.pending.length || thread.evaluating || this.evals.quietWindowOpen(thread, policy)) continue
       this.repo.atomic(() => { this.evals.start(thread.key, policy) })
     }
   }
@@ -138,7 +138,7 @@ export class Engine {
   // People, through the panel or the main Session
 
   /** The assessor delivered an Eval's candidate to its Session: the Eval's deadline counts from now. */
-  candidateDelivered(evalId: string): void { this.repo.atomic(() => { this.evals.delivered(evalId, this.options.policy()) }) }
+  candidateReached(evalId: string): void { this.repo.atomic(() => { this.evals.candidateReached(evalId, this.options.policy()) }) }
   /**
    * Queue a stored Trigger for a fresh Eval, such as a person's replay; returns false while an Eval holds it.
    * @throws UserError when the trigger is unknown.
@@ -261,7 +261,7 @@ export class Engine {
 /** What Sources ask and tell the Engine. */
 export type EngineForSources = Pick<Engine, 'receive' | 'bindThread' | 'threadClosed'>
 /** What the main Session asks of the Engine. */
-export type EngineForMainSession = Pick<Engine, 'candidate' | 'candidateDelivered' | 'decide' | 'attach' | 'reply' | 'requestStatus' | 'note'>
+export type EngineForMainSession = Pick<Engine, 'candidate' | 'candidateReached' | 'decide' | 'attach' | 'reply' | 'requestStatus' | 'note'>
 /** What people ask of the Engine, through the panel or the main Session. */
 export type EngineForPeople = Pick<Engine, 'stopTicket' | 'retryTicket' | 'reevaluate' | 'unsubscribe' | 'dismiss'>
 /** What Settings tells the Engine. */

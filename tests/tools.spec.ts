@@ -374,20 +374,20 @@ it('shows a candidate with its thread\'s tickets open first, the tickets it reac
   const first = await h.acceptedTicket(feishu('1', '@bot 修一下回归'))
   const a = first.ticket
   // Requests on its thread reach its worker, which hands back what is not its own; the main Session then routes them.
-  const handBack = async (id: string) => {
+  const recordHandback = async (id: string) => {
     await h.runTool(first.sessionId, 'orchestrator_trigger_handback', { trigger_id: id, reason: 'Another change.' })
     await h.runtime.pump(); await h.runtime.idle()
   }
   const second = feishu('2', '@bot 另一个问题', { root_id: 'om_1' })
   h.runtime.receive(second); await h.runtime.idle()
-  await handBack(second.id)
+  await recordHandback(second.id)
   const b = (await h.route({ kind: 'accept', trigger_id: second.id, title: 'Other', worktree_name: 'fix-other', acknowledgement: '收到。' })).ticket as
     { ticket_id: string }
   h.runtime.engine.stopTicket(b.ticket_id)
   // A follow-up reaches the live ticket without an Eval; handed back, its candidate shows where it went.
   const more = feishu('3', '@bot 还有按钮', { root_id: 'om_1' })
   h.runtime.receive(more); await h.runtime.idle()
-  await handBack(more.id)
+  await recordHandback(more.id)
   const followup = relaysOf('candidate').at(-1)!
   expect((followup.related_tickets as { ticket_id: string }[]).map(card => card.ticket_id)).toEqual([a.id, b.ticket_id])
   expect(followup).toMatchObject({ tickets_total: 2, delivered_to: [a.id], thread: `feishu:${CHAT}:om_1` })

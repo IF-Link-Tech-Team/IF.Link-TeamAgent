@@ -78,7 +78,7 @@ it('reads the page around a link\'s target once, also for a Trigger the Thread d
 it('shows a follow-up delivered to its Ticket without an Eval, a hand-back with why, and a Ticket that follows the Thread for context', async () => {
   server.threadPages = () => ({ ...threadSummary(), tickets: [ticketSummary(), ticketSummary({ id: 't2', title: '相关工单' })],
     correlated: [], decisions: [], earlier: null, context: ['t2'], url: undefined,
-    timeline: [trigger('f1', '2026-09-23T00:00:00Z', { disposition: { delivered: true, fanout: ['t1'] } }),
+    timeline: [trigger('f1', '2026-09-23T00:00:00Z', { disposition: { workerDecides: true, fanout: ['t1'] } }),
       trigger('f2', '2026-09-23T00:01:00Z', { disposition: { queued: true, fanout: ['t1'], handbacks: [{ ticketId: 't1', title: '修复回归',
         reason: 'Asks for a new page', at: '2026-09-23T00:02:00Z' }] } })] })
   at({ page: 'trigger', id: 'feishu:oc_1:om_root' })

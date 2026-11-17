@@ -1,8 +1,8 @@
 /** Tickets: their lifecycle from an accept to their end, their Subscriptions and their Inputs. */
 import { key } from './ids.ts'
 import { UserError } from './errors.ts'
-import { latestAssignment, latestReport, liveTicket, readUntil, runningAssignment, settled, threadKey, waitsForPerson } from './model.ts'
-import type { Assignment, ChannelRef, Evaluation, Follow, Mandate, PolicyEffect, ThreadRef, Ticket, TicketEndBy, TicketInput, TicketOutcome,
+import { latestAssignment, latestReport, isOpen, readUntil, runningAssignment, settled, threadKey, blockedOnPerson } from './model.ts'
+import type { Assignment, ChannelRef, Eval, Follow, Mandate, PolicyEffect, ThreadRef, Ticket, TicketEndBy, TicketInput, TicketOutcome,
   Trigger, TriggerDisposition } from './model.ts'
 import type { AssessmentOutcome } from './ports.ts'
 import { EnginePart, type EngineOptions } from './part.ts'
@@ -34,7 +34,7 @@ export class Tickets extends EnginePart {
    * Assignment, and the acknowledgement the accept carries, and queue its launch. Its origin is the admissible Trigger that
    * gave the Eval its strength, or the Eval's last Trigger for an Eval recorded before `primary` existed.
    */
-  create(id: string, decisionId: string, mandate: Mandate, evaluation: Pick<Evaluation, 'triggerIds' | 'primary'>,
+  create(id: string, decisionId: string, mandate: Mandate, evaluation: Pick<Eval, 'triggerIds' | 'primary'>,
     outcome: Extract<AssessmentOutcome, { kind: 'accept' }>, at: string): void {
     const { triggerIds } = evaluation
     // Fall back to the last trigger for Evals recorded before `primary` existed.
@@ -60,7 +60,7 @@ export class Tickets extends EnginePart {
    * @throws UserError when the ticket is unknown or has ended.
    */
   bind(ticketId: string, thread: ThreadRef, own: boolean): Ticket {
-    if (!liveTicket(this.require(ticketId))) throw new UserError('ticketEnded')
+    if (!isOpen(this.require(ticketId))) throw new UserError('ticketEnded')
     this.subscribe(ticketId, thread)
     const ticket = this.require(ticketId)
     const followed = threadKey(thread)
@@ -111,7 +111,7 @@ export class Tickets extends EnginePart {
     this.leftToWorkers(trigger)
     const current = this.require(ticketId)
     if (current.ended?.by === 'human') throw new UserError('ticketStopped')
-    if (!liveTicket(current) && !this.policy().revalidate(current.mandate)) throw new UserError('mandateRevoked')
+    if (!isOpen(current) && !this.policy().revalidate(current.mandate)) throw new UserError('mandateRevoked')
     return trigger
   }
   /**
@@ -138,7 +138,7 @@ export class Tickets extends EnginePart {
     else if (note && ticket.undelivered.includes(id)) { existing.note = note; ticket.updatedAt = at; this.repo.tickets.save(ticket) }
     // A person sent it to Eval, or the ticket let it go before its worker took it up, read it for context only, or ended after
     // its worker had it, so the worker gets it again.
-    else if (requeued || !current.fanout.includes(ticketId) || context?.includes(ticketId) || !liveTicket(ticket)) {
+    else if (requeued || !current.fanout.includes(ticketId) || context?.includes(ticketId) || !isOpen(ticket)) {
       this.addInput(ticket, input(key('input', ticketId, 'trigger', trigger.id, 'attached', at)))
     }
     // The worker has the message already, so the note comes with it again.
@@ -151,7 +151,7 @@ export class Tickets extends EnginePart {
    */
   requestStatus(ticketId: string): boolean {
     const ticket = this.require(ticketId)
-    if (!liveTicket(ticket) || runningAssignment(ticket)?.report?.state !== 'waiting') return false
+    if (!isOpen(ticket) || runningAssignment(ticket)?.report?.state !== 'waiting') return false
     this.addInput(ticket, { id: `status:${ticketId}:${ticket.updatedAt}`, kind: 'text', text: STATUS_REQUEST, at: this.now() })
     return true
   }
@@ -192,7 +192,7 @@ export class Tickets extends EnginePart {
     this.dropSubscriptions(thread, 'executor', ticketId, reason)
     // Its worker found the Thread is not its ticket's: it hands back, with its reason, the person's messages there it decides.
     for (const trigger of this.triggersOf(ticket)) {
-      if (trigger.threads.some(ref => threadKey(ref) === thread) && this.owners(trigger).includes(ticketId)) this.handBack(ticketId, trigger, reason)
+      if (trigger.threads.some(ref => threadKey(ref) === thread) && this.owners(trigger).includes(ticketId)) this.recordHandback(ticketId, trigger, reason)
     }
   }
   /**
@@ -237,13 +237,13 @@ export class Tickets extends EnginePart {
     if (ticket.inputs.some(existing => existing.id === input.id)) return
     ticket.inputs.push(input); ticket.updatedAt = this.now()
     // Hold back automated inputs while the worker is waiting on a person.
-    const held = liveTicket(ticket) && automatic(input) && waitsForPerson(ticket)
+    const held = isOpen(ticket) && automatic(input) && blockedOnPerson(ticket)
     if (!held) ticket.undelivered.push(input.id)
     this.repo.tickets.save(ticket)
-    if (!liveTicket(ticket) || held) return
+    if (!isOpen(ticket) || held) return
     const running = runningAssignment(ticket), latest = latestAssignment(ticket)
     if (running) this.options.executor.deliver(ticket, running)
-    else if (latest?.state === 'pending' && !waitsForPerson(ticket)) this.options.executor.start(ticket, latest)
+    else if (latest?.state === 'pending' && !blockedOnPerson(ticket)) this.options.executor.start(ticket, latest)
   }
   /**
    * Queue the mark a Channel puts on a person's message the ticket took up: the message it was accepted from, one it took as
@@ -265,7 +265,7 @@ export class Tickets extends EnginePart {
    */
   wake(ticketId: string): void {
     const ticket = this.repo.tickets.get(ticketId)
-    if (!ticket || liveTicket(ticket) || ticket.ended?.by === 'human' || !ticket.undelivered.length) return
+    if (!ticket || isOpen(ticket) || ticket.ended?.by === 'human' || !ticket.undelivered.length) return
     const policy = this.policy()
     if (policy.paused) return
     if (!policy.revalidate(ticket.mandate)) { this.refuse(ticket); return }
@@ -359,7 +359,7 @@ export class Tickets extends EnginePart {
    */
   end(ticketId: string, by: TicketEndBy, outcome: TicketOutcome, at = this.now(), reason?: string): void {
     const ticket = this.require(ticketId)
-    if (!liveTicket(ticket)) return
+    if (!isOpen(ticket)) return
     const stopping = ticket.assignments.filter(assignment => assignment.state !== 'ended')
     const why = reason && reason !== outcome ? { reason } : {}
     const until = readUntil(ticket)
@@ -410,7 +410,7 @@ export class Tickets extends EnginePart {
    */
   note(ticketId: string, text: string): Ticket {
     const ticket = this.require(ticketId)
-    if (!liveTicket(ticket)) throw new UserError('ticketEnded')
+    if (!isOpen(ticket)) throw new UserError('ticketEnded')
     const at = this.now()
     this.addInput(ticket, { id: key('input', ticketId, 'note', at, text), kind: 'note', text, at })
     return this.require(ticketId)
@@ -421,7 +421,7 @@ export class Tickets extends EnginePart {
    * @throws UserError when the ticket is unknown or has ended.
    */
   followForContext(ticketId: string, ref: ThreadRef): boolean {
-    if (!liveTicket(this.require(ticketId))) throw new UserError('ticketEnded')
+    if (!isOpen(this.require(ticketId))) throw new UserError('ticketEnded')
     if (this.thread(ref).subscriptions.includes(ticketId)) return false
     this.subscribe(ticketId, ref)
     const thread = this.thread(ref)

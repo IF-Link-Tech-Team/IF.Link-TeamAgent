@@ -1,6 +1,6 @@
 /** Shared view projections for triggers, tickets, threads, decisions, and channel links. */
 import { z } from 'zod'
-import { canRetry, followupOwners, latestReport, liveTicket, settled, threadKey, ticketStage, type ActorRef, type ChannelRef, type Decision,
+import { canRetry, followupOwners, latestReport, isOpen, settled, threadKey, ticketStage, type ActorRef, type ChannelRef, type Decision,
   type DecisionKind, type Thread, type ThreadFacts, type Ticket, type TicketStage, type Trigger } from '../../core/index.ts'
 import { allowedSender, listedBot } from '../../policy.ts'
 import type { ChannelLink, Localized } from '../../sources/kind.ts'
@@ -77,7 +77,7 @@ export const awaitingEval = ({ store, owners }: { store: Pick<Store, 'triggers'>
     return !trigger || !owners(trigger).length
   })
 /**
- * A trigger with where it went: queued for Eval, the Decision that consumed it, the Tickets it fanned out to, `delivered`
+ * A trigger with where it went: queued for Eval, the Decision that consumed it, the Tickets it fanned out to, `workerDecides`
  * when it is a person's follow-up that a ticket's worker decides without an Eval, and the Tickets that handed it back for
  * a new Eval, with why; `requeue` when a person may send it to Eval, which is where no Eval reached a judgement: its Source
  * filtered it, its Eval was unavailable, a ticket's worker still decides it, or it reached a ticket and nothing decided it,
@@ -89,17 +89,17 @@ export function triggerView(view: Snapshot, trigger: Trigger, threadDecisions?: 
   const home = store.threads.get(threadKey(trigger.threads[0]!))
   const decision = disposition?.decisionId ? store.decisions.get(disposition.decisionId)
     : (threadDecisions ?? (home ? store.decisions.byThread(home.key) : [])).filter(item => item.triggerIds.includes(trigger.id)).at(-1)
-  const delivered = view.owners(trigger).length > 0
-  const queued = !!home?.pending.includes(trigger.id) && !delivered
+  const workerDecides = view.owners(trigger).length > 0
+  const queued = !!home?.pending.includes(trigger.id) && !workerDecides
   const evaluating = !!home?.evaluating?.triggerIds.includes(trigger.id)
   const decided = !!disposition?.acked?.length || (!!decision && settled(decision))
-  const unjudged = !!disposition?.filtered || decision?.kind === 'unavailable' || delivered || (!!disposition?.fanout.length && !decided)
+  const unjudged = !!disposition?.filtered || decision?.kind === 'unavailable' || workerDecides || (!!disposition?.fanout.length && !decided)
     || (!!decision && !decided)
   const requeue = trigger.human && !queued && !evaluating && unjudged
   return { id: trigger.id, source: trigger.source, actor: view.actor(trigger.actor, trigger.human), human: trigger.human, at: trigger.at,
     text: plain(readable(trigger.text), true),
     preview: preview(trigger.text), url: trigger.url, threads: trigger.threads.map(threadKey), actions: { requeue },
-    disposition: { queued, evaluating, delivered, filtered: disposition?.filtered, fanout: disposition?.fanout ?? [],
+    disposition: { queued, evaluating, workerDecides, filtered: disposition?.filtered, fanout: disposition?.fanout ?? [],
       handbacks: (disposition?.handbacks ?? []).map(item => ({ ...item,
         title: store.tickets.get(item.ticketId)?.title ?? item.ticketId })),
       decision: decision ? { id: decision.id, outcome: outcomeOf(decision), reason: decision.reason, ticketId: decision.ticketId }
@@ -118,9 +118,9 @@ function ticketNote(ticket: Ticket, stage: TicketStage): { text: string; error: 
 export function ticketSummary(ticket: Ticket) {
   const stage = ticketStage(ticket)
   const note = ticketNote(ticket, stage)
-  const state = liveTicket(ticket) ? 'open' as const : 'ended' as const
+  const state = isOpen(ticket) ? 'open' as const : 'ended' as const
   return { id: ticket.id, title: ticket.title, state, ...stage, ...note ? { note } : {},
-    actions: { retry: canRetry(ticket), stop: liveTicket(ticket) }, strength: ticket.mandate.strength, ended: ticket.ended,
+    actions: { retry: canRetry(ticket), stop: isOpen(ticket) }, strength: ticket.mandate.strength, ended: ticket.ended,
     attention: ticket.attention && { ...ticket.attention, question: markdown(ticket.attention.question) },
       assignments: ticket.assignments.length, inputs: ticket.inputs.length, undelivered: ticket.undelivered.length,
     // Every started Assignment of a Ticket runs in its one shared worker Session.
@@ -165,7 +165,7 @@ export function threadSummary(view: Snapshot, thread: Thread) {
   const { store } = view
   const tickets = thread.subscriptions.map(id => {
     const ticket = store.tickets.get(id)
-    return { id, title: ticket?.title ?? id, state: !ticket ? 'unknown' : liveTicket(ticket) ? 'open' : 'ended' }
+    return { id, title: ticket?.title ?? id, state: !ticket ? 'unknown' : isOpen(ticket) ? 'open' : 'ended' }
   })
   const pending = awaitingEval(view, thread).length
   return { key: thread.key, source: thread.ref.source, title: threadTitle(store, thread), stage: threadStage(thread, pending, tickets),

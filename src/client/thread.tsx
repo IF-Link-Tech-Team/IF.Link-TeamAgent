@@ -19,7 +19,7 @@ function triggerTags(t: T, trigger: TriggerRow, subscribed?: Set<string>): React
     const { tone, label } = decisionMark(t, d.decision.outcome)
     tags.push(<Tag key="d" tone={tone}>{label}</Tag>)
   }
-  if (d.delivered) tags.push(<Tag key="o" tone="info" title={t('dispositionDeliveredHint')}>{t('dispositionDelivered')}</Tag>)
+  if (d.workerDecides) tags.push(<Tag key="o" tone="info" title={t('dispositionDeliveredHint')}>{t('dispositionDelivered')}</Tag>)
   else if (d.fanout.length && !(subscribed && d.fanout.every(id => subscribed.has(id)))) tags.push(<Tag key="o"
     tone="info">{t('dispositionFanout', { count: d.fanout.length })}</Tag>)
   return tags

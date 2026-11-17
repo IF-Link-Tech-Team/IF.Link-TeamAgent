@@ -55,7 +55,7 @@ const NO_CONTEXT = 'This Source gives no Thread context; assess the Trigger\'s o
 /** Host dependencies used by `MainAssessor`. */
 export interface AssessorDeps {
   /** Active evaluations in `Engine` that the assessor reads and decides. */
-  readonly engine: Pick<EngineForMainSession, 'candidate' | 'candidateDelivered' | 'decide'>
+  readonly engine: Pick<EngineForMainSession, 'candidate' | 'candidateReached' | 'decide'>
   readonly commands: Commands
   readonly deployment: Deployment
   /** Durable effect queue through which candidate assessments are delivered. */
@@ -104,7 +104,7 @@ export class MainAssessor implements Assessor {
       const candidate = this.host.engine.candidate(triggerId)
       if (candidate?.evalId !== evalId) return
       await this.host.deliver(`candidate:${evalId}`, JSON.stringify({ kind: 'candidate', ...await this.host.candidateCard(candidate) }))
-      this.host.engine.candidateDelivered(evalId)
+      this.host.engine.candidateReached(evalId)
     }, { limit: () => host.paused() ? 0 : 4 })
   }
   /** Enqueues an `assessment` effect to deliver `candidate`'s card to the main Session. */

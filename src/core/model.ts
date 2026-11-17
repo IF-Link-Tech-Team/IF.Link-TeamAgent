@@ -85,7 +85,7 @@ export function followupOwners(trigger: Pick<Trigger, 'id' | 'human' | 'threads'
   if (!reached.length || records.threads.get(threadKey(trigger.threads[0]!))?.evaluating?.triggerIds.includes(trigger.id)) return []
   return reached.filter(id => {
     const ticket = records.tickets.get(id)
-    return !!ticket && (liveTicket(ticket) || (ticket.ended?.by !== 'human'
+    return !!ticket && (isOpen(ticket) || (ticket.ended?.by !== 'human'
       && ticket.inputs.some(input => input.kind === 'trigger' && input.triggerId === trigger.id && ticket.undelivered.includes(input.id))))
   })
 }
@@ -136,7 +136,7 @@ export interface Mandate {
 }
 
 /** Active trigger evaluation on a thread; at most one exists per thread. */
-export interface Evaluation {
+export interface Eval {
   id: string
   threadKey: string
   triggerIds: string[]
@@ -149,8 +149,8 @@ export interface Evaluation {
   policyVersion: string
   startedAt: string
   /** Timestamp when the candidate reached the assessor's Session; it cannot expire before, and its deadline counts from then. */
-  delivered?: string
-  /** Expiration timestamp, counted from delivery (or from start until delivered); a processing pause shifts it forward by the pause duration. */
+  candidateReached?: string
+  /** Expiration timestamp, counted from the candidate reaching the Session (or from start until then); a processing pause shifts it forward by the pause duration. */
   deadline: string
   /** Timestamp when processing pause began; resuming shifts `deadline` forward by the pause duration; cleared on resume. */
   pausedAt?: string
@@ -174,7 +174,7 @@ export interface Thread {
   correlated: string[]
   /** Triggers waiting for the next eval (debounce buffer). */
   pending: string[]
-  evaluating?: Evaluation
+  evaluating?: Eval
   /** How many Evals of its queued Triggers expired in a row, each of which queued them again; a Decision clears it. */
   expired?: number
   /**
@@ -354,7 +354,7 @@ export interface Execution {
 }
 
 /** Whether a ticket is open: it has not ended. */
-export const liveTicket = (ticket: Pick<Ticket, 'ended'>): boolean => !ticket.ended
+export const isOpen = (ticket: Pick<Ticket, 'ended'>): boolean => !ticket.ended
 /** How a ticket ended. */
 export const ticketOutcome = (ticket: Pick<Ticket, 'ended'>): TicketOutcome | undefined => ticket.ended?.outcome
 export const runningAssignment = (ticket: Ticket): Assignment | undefined => ticket.assignments.find(assignment => assignment.state === 'running')
@@ -385,7 +385,7 @@ export function readUntil(ticket: Pick<Ticket, 'assignments'>, progress = true):
  * Whether a ticket waits for a person: its latest Assignment reported blocked or failed, and no person's message reached it
  * since. A later report that is neither, a person's message, or a retry, which starts a new Assignment, lifts it.
  */
-export function waitsForPerson(ticket: Ticket): boolean {
+export function blockedOnPerson(ticket: Ticket): boolean {
   const report = latestAssignment(ticket)?.report
   if (report?.state !== 'blocked' && report?.state !== 'failed') return false
   return !ticket.inputs.some(input => input.kind === 'trigger' && input.human && !input.context && input.at > report.at)

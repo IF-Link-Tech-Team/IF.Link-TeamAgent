@@ -55,12 +55,12 @@ type TriggerFields = Partial<Omit<TriggerRow, 'disposition' | 'actions'>> & { di
 export function trigger(id: string, at: string, { disposition, ...fields }: TriggerFields = {}): TriggerRow {
   const row = { id, source: 'feishu', actor: actor('feishu', MEMBER), human: true, at, text: `message ${id}`, preview: `message ${id}`,
     url: undefined, threads: ['feishu:oc_1:om_root'], ...fields,
-    disposition: { queued: false, evaluating: false, delivered: false, filtered: undefined, fanout: [], handbacks: [], decision: undefined,
+    disposition: { queued: false, evaluating: false, workerDecides: false, filtered: undefined, fanout: [], handbacks: [], decision: undefined,
       ...disposition } }
   return { ...row, actions: { requeue: requeueable(row) } }
 }
 const requeueable = ({ human, disposition: d }: Pick<TriggerRow, 'human' | 'disposition'>) => human && !d.queued && !d.evaluating
-  && (!!d.filtered || d.decision?.outcome === 'unavailable' || d.delivered || (d.fanout.length > 0 && !d.decision))
+  && (!!d.filtered || d.decision?.outcome === 'unavailable' || d.workerDecides || (d.fanout.length > 0 && !d.decision))
 type SearchItem = ApiResponse<'GET search'>['items'][number]
 export function found(id: string, at: string, { threadTitle, filtered,
   ...fields }: TriggerFields & { threadTitle?: string; filtered?: string } = {}): SearchItem {

@@ -3,7 +3,7 @@ import { spawn } from 'node:child_process'
 import { createInterface } from 'node:readline'
 import { setTimeout as delay } from 'node:timers/promises'
 import { z } from 'zod'
-import { liveTicket, threadKey, type Thread, type Trigger } from '../core/index.ts'
+import { isOpen, threadKey, type Thread, type Trigger } from '../core/index.ts'
 import { feishuChatLink } from './feishu-channel.ts'
 import type { FeishuBot } from '../deployment.ts'
 import { atSite, takeLarkCalls, validItems, type Commands, type LarkSite, type Tally } from '../infra/commands.ts'
@@ -484,7 +484,7 @@ export function threadDue(ctx: SourceContext, thread: Thread, now = Date.now(), 
   if (now - (activity.thread.get(thread.key) ?? 0) < timing.threadPoll) return false
   const followed = thread.subscriptions.some(id => {
     const ticket = ctx.tickets.get(id)
-    return !!ticket && liveTicket(ticket)
+    return !!ticket && isOpen(ticket)
   })
   if (followed) return true
   return now - Date.parse(thread.lastAt ?? thread.createdAt) < timing.threadRecent

@@ -609,7 +609,7 @@ function assessmentTriggers(store: Store): void {
   let seq = Number(store.db.prepare('SELECT COALESCE(MAX(seq), 0) AS seq FROM effect').get()?.seq ?? 0)
   for (const thread of store.threads.active()) {
     const evaluation = thread.evaluating
-    if (!evaluation || evaluation.delivered || !evaluation.triggerIds[0]) continue
+    if (!evaluation || evaluation.candidateReached || !evaluation.triggerIds[0]) continue
     store.db.prepare(`INSERT INTO effect (kind, key, value, seq, due, since) VALUES ('assessment', ?, ?, ?, ?, ?) ON CONFLICT(kind, key) DO NOTHING`)
       .run(evaluation.id, JSON.stringify({ triggerId: evaluation.triggerIds[0] }), ++seq, Date.now(), new Date().toISOString())
   }

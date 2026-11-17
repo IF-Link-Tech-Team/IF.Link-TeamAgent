@@ -1,5 +1,5 @@
 /** Ticket list, ticket detail, mandate basis formatting, and executor load views. */
-import { liveTicket, threadKey, ticketStage, type AcceptMode, type AdmissionCell, type MandateBasis, type Ticket,
+import { isOpen, threadKey, ticketStage, type AcceptMode, type AdmissionCell, type MandateBasis, type Ticket,
   type TicketStage } from '../../core/index.ts'
 import { workerSessionId } from '../../executor/dsh.ts'
 import type { Store } from '../store.ts'
@@ -35,7 +35,7 @@ export function basisFacts(basis: MandateBasis, rule: Snapshot['rule']): { facts
 export function ticketList(host: ViewDeps, stage: 'open' | TicketStage['stage'], offset: number, limit: number) {
   const view = snapshot(host)
   const { store } = view
-  const shown = (ticket: Ticket) => stage === 'open' ? liveTicket(ticket) : ticketStage(ticket).stage === stage
+  const shown = (ticket: Ticket) => stage === 'open' ? isOpen(ticket) : ticketStage(ticket).stage === stage
   const tickets = (stage === 'ended' ? store.tickets.list() : store.tickets.open()).filter(shown).sort(newestFirst)
   const result = page(tickets, offset, limit)
   return { ...result, items: result.items.map(ticket => ticketRow(view, ticket)) }

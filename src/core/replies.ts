@@ -1,7 +1,7 @@
 /** The Engine's messages to Channels, each by the rule that allows it. */
 import { key } from './ids.ts'
 import { UserError } from './errors.ts'
-import { latestAssignment, liveTicket, ticketOutcome } from './model.ts'
+import { latestAssignment, isOpen, ticketOutcome } from './model.ts'
 import type { ChannelRef, Gesture, Strength, Ticket, Trigger } from './model.ts'
 import type { ReplyStatus } from './ports.ts'
 import { EnginePart } from './part.ts'
@@ -100,7 +100,7 @@ export class Replies extends EnginePart {
   withdrawAttention(attentionId: string): void { this.options.outbox.withdraw(key('attention-reply', attentionId)) }
   private acknowledge(request: Extract<ReplyRequest, { purpose: 'acknowledgement' }>): Reply {
     const ticket = this.require(request.ticketId)
-    if (!liveTicket(ticket)) throw new UserError('ackEnded')
+    if (!isOpen(ticket)) throw new UserError('ackEnded')
     const trigger = this.repo.triggers.get(request.triggerId)
     if (!trigger) throw new UserError('unknownTrigger')
     // Context-only threads are read-only and cannot receive acknowledgements.
@@ -121,7 +121,7 @@ export class Replies extends EnginePart {
       : trigger ? this.repo.tickets.list().find(item => this.reaches(item, trigger)) : undefined
     if (request.purpose === 'result') {
       const outcome = ticket && ticketOutcome(ticket)
-      const reported = !!ticket && liveTicket(ticket) && latestAssignment(ticket)?.report?.state === 'ready'
+      const reported = !!ticket && isOpen(ticket) && latestAssignment(ticket)?.report?.state === 'ready'
       const ready = outcome === 'merged' || outcome === 'completed' || outcome === 'dropped' || reported
       if (!ticket || !ready) throw new UserError('notReady')
     }
