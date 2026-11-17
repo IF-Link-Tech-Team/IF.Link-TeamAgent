@@ -8,7 +8,7 @@ import { isoTime, said, type AcceptMode, type AdmissionCell, type ChannelRef, ty
   type Reason, type Thread, type Ticket, type TicketInput, type TriggerDisposition } from '../core/index.ts'
 import { feishuChatLink } from '../sources/feishu-channel.ts'
 import { POLL_HORIZON_MS } from '../sources/poll.ts'
-import { SettingsSchema, policyVersion, type SettingsOrigin } from '../policy.ts'
+import { SettingsSchema, policyVersion, type SettingsOrigin } from '../policy/index.ts'
 import { autoMergeThreshold, teamDefaults } from './context.ts'
 import { PromptConfigSchema, type PromptConfig, type PromptVersion } from './prompts.ts'
 import type { EffectKind, EffectPayloads } from './effects.ts'

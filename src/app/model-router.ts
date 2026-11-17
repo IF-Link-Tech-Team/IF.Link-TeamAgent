@@ -15,7 +15,7 @@ import type { LlmCallConfig, LlmFailure } from '@deepseek-ai/dsh-llm'
 import { ReasoningEffortId } from '@deepseek-ai/dsh-llm'
 import { appendPluginRecord } from '@deepseek-ai/dsh-session'
 import type { HealthEntry } from '../infra/health.ts'
-import type { RoleModel, Settings } from '../policy.ts'
+import type { RoleModel, Settings } from '../policy/index.ts'
 import type { Store } from './store.ts'
 
 declare module '@deepseek-ai/dsh-session' {

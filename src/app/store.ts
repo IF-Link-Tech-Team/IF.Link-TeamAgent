@@ -5,7 +5,7 @@ import { dirname, join } from 'node:path'
 import { key, reasonText, threadKey, type ChannelRef, type Decision, type OutboundMessage, type Reason, type ReplyStatus, type Repositories,
   type Thread, type ThreadFact, type ThreadFacts, type Ticket, type Trigger, type TriggerDisposition } from '../core/index.ts'
 import { KV, type Family, type Key } from '../kv.ts'
-import { SettingsSchema, type Settings, type SettingsOrigin, type SettingsSave } from '../policy.ts'
+import { SettingsSchema, type Settings, type SettingsOrigin, type SettingsSave } from '../policy/index.ts'
 import { OLDEST_SCHEMA, SCHEMA_VERSION, migrateTo11, tooOld } from './migration.ts'
 import { Versions } from './versions.ts'
 import { storeReads } from './store-read.ts'

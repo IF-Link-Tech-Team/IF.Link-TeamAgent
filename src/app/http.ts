@@ -9,7 +9,7 @@ import type { ModelCatalog } from '@deepseek-ai/dsh-api-session-controller/types
 import type { RouteState } from './model-router.ts'
 import { PromptConflict, SKILL_NAME, SKILL_PREFIX, TEAM_SECTIONS, builtInBase, builtInParts, defaultPrompts, savePrompts, type Prompts }
   from './prompts.ts'
-import { policyVersion } from '../policy.ts'
+import { policyVersion } from '../policy/index.ts'
 import { SettingsConflict, type Settings } from './settings.ts'
 import { SetupError, type SetupProblem } from '../setup-errors.ts'
 import { UserError, type EngineForPeople, type Ticket } from '../core/index.ts'

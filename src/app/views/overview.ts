@@ -2,7 +2,7 @@
 import { reasonText, ticketStage, type Decision, type Thread } from '../../core/index.ts'
 import type { Health } from '../../sources/host.ts'
 import type { SetupProblem } from '../../setup-errors.ts'
-import { anyoneAllowed } from '../../policy.ts'
+import { anyoneAllowed } from '../../policy/index.ts'
 import type { Store } from '../store.ts'
 import { awaitingEval, dayAgo, newestFirst, ownersOf, snapshot, threadSummary, type ViewDeps } from './records.ts'
 import { sourceHealth, type HealthMap } from './sources.ts'

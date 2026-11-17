@@ -1,6 +1,6 @@
 /** Compact editors for worker runtimes and the task-routing table; every mapping is settings data, never code. */
 import { Fragment, useState } from 'react'
-import type { DispatchConfig, DispatchFamily, DispatchType, RuntimeProfile } from '../policy.ts'
+import type { DispatchConfig, DispatchFamily, DispatchType, RuntimeProfile } from '../policy/index.ts'
 import { usePanel } from './provider.tsx'
 import { Button, DisclosureRow, Icon, InfoTip, Input, Switch } from './controls.tsx'
 import { SaveBar } from './draft.tsx'

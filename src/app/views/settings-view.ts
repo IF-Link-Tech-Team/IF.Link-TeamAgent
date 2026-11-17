@@ -1,7 +1,7 @@
 /** Settings view combining versioned configuration blocks, per-source forms and policy metadata, and execution environment details. */
 import { SETUP_FIELDS } from '../../deployment.ts'
 import { KV } from '../../kv.ts'
-import { policyVersion, SETTINGS_MASK } from '../../policy.ts'
+import { policyVersion, SETTINGS_MASK } from '../../policy/index.ts'
 import type { SourceRegistry } from '../../sources/registry.ts'
 import { declaredVariables, executionRoot } from '../execution-environment.ts'
 import type { Store } from '../store.ts'

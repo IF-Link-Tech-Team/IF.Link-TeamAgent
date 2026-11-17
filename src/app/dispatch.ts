@@ -1,5 +1,5 @@
 /** Deterministic worker routing: task type decides the family, difficulty decides the model, and every table is settings. */
-import type { Difficulty, DispatchFamily, Settings } from '../policy.ts'
+import type { Difficulty, DispatchFamily, Settings } from '../policy/index.ts'
 
 /** What the Router or a deterministic hint says about a ticket's work. */
 export interface DispatchRequest {

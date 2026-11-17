@@ -105,7 +105,7 @@ When a Ticket ends, unread follow-ups return to Eval unless another Ticket still
 
 After a change, the Engine emits an event from `DomainEvents` in `src/core/ports.ts`:
 
-`trigger.received`, `eval.started`, `decision.recorded`, `ticket.created`, `ticket.resumed`, `ticket.ended`, `assignment.started`, `assignment.ended`, `thread.subscribed`, `thread.unsubscribed`, `trigger.requeued`, or `policy.changed`.
+`trigger.received`, `eval.started`, `decision.recorded`, `ticket.created`, `ticket.resumed`, `ticket.ended`, `assignment.started`, `assignment.ended`, `thread.subscribed`, `thread.unsubscribed`, `trigger.requeued`, `trigger.followup`, or `policy.changed`.
 
 Runtime turns `ticket.ended`, `trigger.requeued` and `thread.unsubscribed` into notices. A human `trigger.received` delivered to Tickets becomes a follow-up relay. `pullEndNotices` sends one chat notice, using a stable id, when a Ticket ends merged or closed. Other events currently have no consumer.
 
@@ -136,7 +136,7 @@ Trigger and Thread `meta` belong to the Source. The core does not interpret them
 
 ### Policy
 
-`src/policy.ts` defines settings schemas, authorization and assessment rules. `settingsPolicy(settings, scope)` returns a fresh, stateless `Policy` on each use:
+`src/policy/` defines settings schemas (`schema.ts`), assessment validation (`assessment.ts`), and authorization (`gate.ts`). `settingsPolicy(settings, scope)` returns a fresh, stateless `Policy` on each use:
 
 - `version`, `paused` and `evalTimeoutMs` describe its current state.
 - `gate(trigger, thread, tickets)` returns admission strength and basis.
@@ -275,7 +275,7 @@ Each model request binds the Session to the current prompt revision. The revisio
   | Prompt versions | Prompts |
   | Effect rows | Effects |
   | Outbox receipts | The Outbox: the Engine's messages and Sources' `notify` go through its `send`, and its `reply` effects mark them |
-  | A health entry | The part that claimed it on the `HealthBoard` (`src/infra/health.ts`), which refuses a second claim: `runtime` the Runtime, which Passes report through, `evals` the Runtime after each pass, `models` Sessions, each effect kind Effects, `worker` the DshExecutor, a Source kind's entries the SourceRegistry for that kind's Source, `sync:<id>` Settings |
+  | A health entry | The part that claimed it on the `HealthBoard` (`src/infra/health.ts`), which refuses a second claim: `runtime` the Runtime, which Passes report through, `evals` the Runtime after each pass, `models` Sessions, `model-fallback` the ModelRouter, `marks` the reaction picker, each effect kind Effects, `worker` the DshExecutor and `worker:acp` the ACP executor, a Source kind's entries the SourceRegistry for that kind's Source, `sync:<id>` Settings |
 
   A Source changes a Ticket only through `SourceContext.tickets.bindThread` and `threadClosed`, which call the Engine.
 - **Requests and facts.** A method that asks for something is named by an imperative verb and its object, such as `stopTicket` or `bindThread`, and may be refused; a method that records what an adapter did is named in the past tense, such as `assignmentStarted` or `deliveryFailed`. Each host receives the Engine as the role type it needs.
@@ -302,7 +302,7 @@ Some generic modules still refer directly to GitHub or Feishu:
 | `src/index.ts` | The main plugin entry: reads the machine settings, starts the Runtime, and gives it the restart that a save of a Source's account uses |
 | `src/deployment.ts` | The plugin `Config` and `Machine`; `resolveDeployment` and `resolveFeishuBot` read the repository and the accounts from the Source settings, each CLI run as Executor shells run it; `SETUP_FIELDS` lists the Source fields setup reads. The code names no person, account or organization |
 | `src/setup-errors.ts` | Setup problems: `SetupError`, with a code, the place that fixes it and the English text the log, the main Session and the panel share |
-| `src/policy.ts` | The Policy: the settings schemas by block, the Policy version, the gate and Mandate revalidation |
+| `src/policy/schema.ts`, `assessment.ts`, `gate.ts`, `index.ts` | The settings schemas by block; assessment validation; the Policy version, gate and Mandate revalidation; the barrel the rest imports |
 | `src/admission.ts` | The admission table's values, each cell's options and defaults, shared with the panel |
 | `src/limits.ts` | The limits of the values a person sets, which the settings schemas check and the panel's fields offer |
 | `src/feishu-emojis.ts` | Every emoji `im.reactions.create` accepts, with the Chinese each reads as and whether a working message may wear it |
@@ -526,11 +526,11 @@ Nothing deletes old records yet, so these grow without bound: the `trigger`, `di
 
 ### Main Session tools
 
-The main Session has 14 application tools:
+The main Session has 15 application tools:
 
 | Purpose | Tools |
 | --- | --- |
-| Read and route | `orchestrator_read`, `orchestrator_route` |
+| Read and route | `orchestrator_read`, `orchestrator_search`, `orchestrator_route` |
 | Manage Tickets | `orchestrator_ticket_retry`, `orchestrator_ticket_request_status`, `orchestrator_ticket_note` |
 | Re-evaluate | `orchestrator_trigger_requeue` |
 | Assess proactive work | `orchestrator_eval`, `orchestrator_eval_read`, `orchestrator_eval_decide` |
@@ -539,7 +539,7 @@ The main Session has 14 application tools:
 
 `orchestrator_route` accepts 1–20 decisions in order. Each accept, attach, stop or ignore runs as a separate Engine command. It also permits ignoring an inferred candidate directly from its card. `orchestrator_ticket_note` sends a fact as context, not authority.
 
-Settings saves select `policy`, `eval`, `executor`, `routing`, `marks`, `pause`, or `source`; the last also names its Source id, and a `marks` token reads back as a mask. A prompt save with `preview: true` composes text without saving.
+Settings saves select `policy`, `eval`, `executor`, `routing`, `marks`, `runtimes`, `dispatch`, `pause`, or `source:<id>` (the Source block also names its id), and a `marks` token reads back as a mask. A prompt save with `preview: true` composes text without saving.
 
 The main Session also has DeepSeek Harness's `skill`, `bash`, `read`, `read_image`, `job_output`, `job_list` and `job_kill`. Avoiding code reads is a prompt rule, not a tool restriction.
 

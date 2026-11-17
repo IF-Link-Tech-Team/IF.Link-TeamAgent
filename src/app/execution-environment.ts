@@ -2,7 +2,7 @@
 import { join } from 'node:path'
 import type { Ticket, Trigger } from '../core/index.ts'
 import type { Deployment } from '../deployment.ts'
-import type { Settings } from '../policy.ts'
+import type { Settings } from '../policy/index.ts'
 import type { Localized, VariableSpec } from '../sources/kind.ts'
 import type { SourceRegistry } from '../sources/registry.ts'
 

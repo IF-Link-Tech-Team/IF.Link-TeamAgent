@@ -8,7 +8,7 @@ import { key, latestAssignment, latestReport, isOpen, runningAssignment, threadK
 import type { AssessmentOutcome, Assignment, EngineForExecutor, Execution, Executor, Mandate, PolicyEffect, Ticket, TicketInput, Trigger }
   from '../core/index.ts'
 import type { Machine } from '../deployment.ts'
-import type { Settings } from '../policy.ts'
+import type { Settings } from '../policy/index.ts'
 import type { Store } from '../app/store.ts'
 import { Later, type Effects } from '../app/effects.ts'
 import { executionRoot, type Variable } from '../app/execution-environment.ts'

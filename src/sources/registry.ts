@@ -2,7 +2,7 @@
 import type { ChannelRef, OutboundMessage, ScopeResult, SourceScope, Trigger } from '../core/index.ts'
 import type { Commands } from '../infra/commands.ts'
 import { HealthBoard, type HealthEntry } from '../infra/health.ts'
-import { AdmissionTableSchema, type Settings } from '../policy.ts'
+import { AdmissionTableSchema, type Settings } from '../policy/index.ts'
 import type { ChannelLink, ChannelLinks, SourceInstance, SourceKind, TriggerContext, VariableSpec } from './kind.ts'
 
 

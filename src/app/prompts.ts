@@ -1,7 +1,7 @@
 /** Manages versioned role prompts, behavioral policies, and operational skills independently of access settings. */
 import { z } from 'zod'
 import { UserError, key } from '../core/index.ts'
-import { policyVersion, type Settings, type SettingsOrigin } from '../policy.ts'
+import { policyVersion, type Settings, type SettingsOrigin } from '../policy/index.ts'
 import { masterPrompt, workerPrompt, sharedPrompt, guides, mainAdmissionPolicy, handoffPolicy, teamDefaults, sourceSkills, cliNotes } from './context.ts'
 import { environmentLines, type Variable } from './execution-environment.ts'
 import { promptsNotice } from './notices.ts'

@@ -4,7 +4,7 @@
  */
 import type { PromptVersion } from './app/prompts.ts'
 import type { SettingsVersion } from './app/store.ts'
-import type { SettingsSave } from './policy.ts'
+import type { SettingsSave } from './policy/index.ts'
 import type { Retry } from './sources/github.ts'
 
 /** Key of a KV record whose value has type `V`; a plain string represents an untyped key. */

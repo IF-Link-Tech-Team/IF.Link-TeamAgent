@@ -2,7 +2,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent, ModelSelection } from '@deepseek-ai/dsh-agent'
 import { ReasoningEffortId } from '@deepseek-ai/dsh-llm'
-import type { RoleModel } from '../policy.ts'
+import type { RoleModel } from '../policy/index.ts'
 
 /** Resolve a configured route through the live provider; catalog membership is not a restriction. */
 export async function resolveRoleModel(ctx: Context, model: RoleModel): Promise<ModelSelection> {
