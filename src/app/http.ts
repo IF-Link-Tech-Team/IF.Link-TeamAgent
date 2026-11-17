@@ -3,6 +3,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-host-webserver'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { z } from 'zod'
+import type { Actions } from './actions.ts'
 import { THREAD_FILTERS, TICKET_FILTERS, type Api, type ApiResponse, type RouteParams } from './api.ts'
 import { sourceSkills } from './context.ts'
 import type { ModelCatalog } from '@deepseek-ai/dsh-api-session-controller/types'
@@ -38,6 +39,8 @@ export interface HttpHost {
   readonly sessions: Pick<Sessions, 'status' | 'notify' | 'delivery'>
   readonly settings: Pick<Settings, 'view' | 'save' | 'pause' | 'sync' | 'refreshLabels'>
   readonly engine: EngineForPeople
+  /** The same operations the tools call, so a rule holds on both surfaces. */
+  readonly actions: Actions
   readonly executor: Pick<DispatchExecutor, 'activeCount'>
   readonly health: Record<string, Health>
   readonly machine: Machine
@@ -174,14 +177,10 @@ function routes(runtime: HttpHost): Routes {
       return detail
     },
     'POST threads/:key/unsubscribe': async ({ params }) => {
-      const removed = runtime.engine.unsubscribe(params.key)
+      const removed = runtime.actions.unsubscribe(params.key, 'panel')
       return { removed, thread: params.key, context_delivery: await runtime.sessions.delivery(`subscription:${params.key}`) }
     },
-    'POST triggers/:id/requeue': ({ params }) => {
-      const queued = runtime.engine.reevaluate(params.id)
-      runtime.requestPass()
-      return { queued }
-    },
+    'POST triggers/:id/requeue': ({ params }) => ({ queued: runtime.actions.requeue(params.id, 'panel') }),
     'GET decisions': ({ query }) => {
       const { kind, window, offset, limit } = DecisionsQuery.parse(query)
       const since = window ? new Date(Date.now() - 86_400_000).toISOString() : ''
@@ -193,8 +192,8 @@ function routes(runtime: HttpHost): Routes {
       return ticketList(views(runtime), state, offset, limit)
     },
     'GET tickets/:id': ({ params }) => ticketPage(runtime, params.id),
-    'POST tickets/:id/retry': ({ params }) => { const id = ticket(params.id); runtime.engine.retryTicket(id); return { retried: true } },
-    'POST tickets/:id/stop': ({ params }) => { const id = ticket(params.id); runtime.engine.stopTicket(id); return { stopped: true } },
+    'POST tickets/:id/retry': ({ params }) => { runtime.actions.retry(ticket(params.id), 'panel'); return { retried: true } },
+    'POST tickets/:id/stop': ({ params }) => { runtime.actions.stop(ticket(params.id), 'panel'); return { stopped: true } },
     'POST executor/pause': async ({ body }) => runtime.settings.pause(z.object({ paused: z.boolean() }).parse(await body()).paused, 'panel'),
     'PUT settings/:block': async ({ params, body }) => {
       const block = SettingsBlockSchema.parse(params.block)

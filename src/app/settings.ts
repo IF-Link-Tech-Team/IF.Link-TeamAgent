@@ -180,40 +180,12 @@ export class Settings {
    */
   async save(block: SettingsBlock, value: unknown, revision: number, origin: SettingsOrigin) {
     const { store, sources, engine, sessions } = this.host
-    const stale = () => revision !== store.blockRevision(block)
-    if (stale()) throw new SettingsConflict('Settings changed. Reload before saving.')
-    const id = block.startsWith('source:') ? block.slice(7) : block
-    const kind = block.startsWith('source:') ? 'source' : block
-    if (!(kind in BLOCKS)) throw new UserError('unknownBlock', { block })
-    const rules = BLOCKS[kind as keyof typeof BLOCKS]
-    if (kind === 'source' && !sources.kind(id)) throw new UserError('sourceNotInstalled', { source: id })
-    // A read masks the marks token; saving the mask keeps the stored value instead of replacing it with bullets.
-    const parsed = rules.parse(block === 'marks' ? unmaskedMarks(value, store.settings().marks) : value, sources, id)
-    const current = store.settings()
-    const candidate = rules.merge(current, parsed, id)
-    const model = block === 'eval' ? candidate.eval.model : block === 'executor' ? candidate.executor.model : null
-    const previous = block === 'eval' ? current.eval.model : block === 'executor' ? current.executor.model : null
-    if (model && JSON.stringify(model) !== JSON.stringify(previous)) {
-      try { await resolveRoleModel(this.host.context, model) }
-      catch (error) { throw new UserError('modelUnavailable', { block, error: error instanceof Error ? error.message : String(error) }) }
-    }
-    // Check every changed fallback route against the live providers so a typo cannot silently disable failover.
-    const fallbacks = block === 'eval' ? candidate.eval.fallbacks : block === 'executor' ? candidate.executor.fallbacks : []
-    const previousFallbacks = block === 'eval' ? current.eval.fallbacks : block === 'executor' ? current.executor.fallbacks : []
-    if (JSON.stringify(fallbacks) !== JSON.stringify(previousFallbacks)) {
-      for (const [index, route] of fallbacks.entries()) {
-        const name = `fallback route ${index + 1} (${route.provider}/${route.model})`
-        if (model && route.provider === model.provider && route.model === model.model) {
-          throw new UserError('modelUnavailable', { block, error: `${name} repeats the primary model` })
-        }
-        try { await resolveRoleModel(this.host.context, route) }
-        catch (error) { throw new UserError('modelUnavailable', { block, error: `${name}: ${error instanceof Error ? error.message : String(error)}` }) }
-      }
-    }
+    const { id, rules, parsed, current, candidate } = this.prepare(block, value, revision)
+    await this.verifyModels(block, current, candidate)
     rules.guard?.(current, candidate, origin)
     if (setupChanged(current, candidate)) await this.host.setup.checkAccounts(block, candidate)
-    if (stale()) throw new SettingsConflict('Settings changed during the checks. Reload before saving.')
-    // Re-read current settings after async checks in case unrelated blocks were saved concurrently.
+    // The checks above awaited providers and setup, so another save may have landed meanwhile.
+    if (revision !== store.blockRevision(block)) throw new SettingsConflict('Settings changed during the checks. Reload before saving.')
     const old = store.settings()
     const settings = rules.merge(old, parsed, id)
     if (JSON.stringify(SettingsSchema.parse(settings)) === JSON.stringify(old)) {
@@ -233,14 +205,53 @@ export class Settings {
     })
     // Rewrite worker command shims immediately when `blockedCommands` changes.
     const blocked = settings.executor.blockedCommands
-    const changed = blocked.join(' ') !== old.executor.blockedCommands.join(' ')
-    if (changed) await this.host.setup.blockCommands(blocked)
+    if (blocked.join(' ') !== old.executor.blockedCommands.join(' ')) await this.host.setup.blockCommands(blocked)
     // When restarting, the notice stays pending until after the restart; `setup.restart()` defers until this call returns.
     const delivery = restarting ? 'pending' : await sessions.delivery(`settings:${block}`)
     if (restarting) this.host.setup.restart()
     else this.host.requestPass()
     return { saved: true, revision: store.blockRevision(block), policy_changed: before !== after, restarting, context_delivery: delivery }
   }
+
+  /** Validates `value` against `block` and merges it over the current settings, before any provider or setup check. */
+  private prepare(block: SettingsBlock, value: unknown, revision: number) {
+    const { store, sources } = this.host
+    if (revision !== store.blockRevision(block)) throw new SettingsConflict('Settings changed. Reload before saving.')
+    const id = block.startsWith('source:') ? block.slice(7) : block
+    const kind = block.startsWith('source:') ? 'source' : block
+    if (!(kind in BLOCKS)) throw new UserError('unknownBlock', { block })
+    const rules = BLOCKS[kind as keyof typeof BLOCKS]
+    if (kind === 'source' && !sources.kind(id)) throw new UserError('sourceNotInstalled', { source: id })
+    // A read masks the marks token; saving the mask keeps the stored value instead of replacing it with bullets.
+    const parsed = rules.parse(block === 'marks' ? unmaskedMarks(value, store.settings().marks) : value, sources, id)
+    const current = store.settings()
+    return { id, rules, parsed, current, candidate: rules.merge(current, parsed, id) }
+  }
+
+  /**
+   * Checks a changed primary model and every changed fallback route against the live providers, so a typo cannot silently
+   * disable failover. A block other than `eval` and `executor` changes no model and costs nothing here.
+   */
+  private async verifyModels(block: SettingsBlock, current: SettingsValue, candidate: SettingsValue): Promise<void> {
+    const model = block === 'eval' ? candidate.eval.model : block === 'executor' ? candidate.executor.model : null
+    const previous = block === 'eval' ? current.eval.model : block === 'executor' ? current.executor.model : null
+    if (model && JSON.stringify(model) !== JSON.stringify(previous)) {
+      try { await resolveRoleModel(this.host.context, model) }
+      catch (error) { throw new UserError('modelUnavailable', { block, error: error instanceof Error ? error.message : String(error) }) }
+    }
+    const fallbacks = block === 'eval' ? candidate.eval.fallbacks : block === 'executor' ? candidate.executor.fallbacks : []
+    const previousFallbacks = block === 'eval' ? current.eval.fallbacks : block === 'executor' ? current.executor.fallbacks : []
+    if (JSON.stringify(fallbacks) === JSON.stringify(previousFallbacks)) return
+    for (const [index, route] of fallbacks.entries()) {
+      const name = `fallback route ${index + 1} (${route.provider}/${route.model})`
+      if (model && route.provider === model.provider && route.model === model.model) {
+        throw new UserError('modelUnavailable', { block, error: `${name} repeats the primary model` })
+      }
+      try { await resolveRoleModel(this.host.context, route) }
+      catch (error) { throw new UserError('modelUnavailable', { block, error: `${name}: ${error instanceof Error ? error.message : String(error)}` }) }
+    }
+  }
+
   /**
    * Pauses or resumes processing (new evaluations, worker dispatch, and channel delivery, while Sources continue recording
    * Triggers); saved in its own `'pause'` block so concurrent `executor` edits remain valid across it.

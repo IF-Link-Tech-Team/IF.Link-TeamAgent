@@ -1,5 +1,6 @@
 import { expect, it } from 'vitest'
 import { z } from 'zod'
+import { Actions } from '../src/app/actions.ts'
 import { registerHttp } from '../src/app/http.ts'
 import { PromptConflict } from '../src/app/prompts.ts'
 import { SettingsConflict } from '../src/app/settings.ts'
@@ -7,6 +8,14 @@ import type { HttpHost } from '../src/app/http.ts'
 import { SettingsSchema } from '../src/policy/index.ts'
 import { SetupError } from '../src/setup-errors.ts'
 
+/** The real actions class over stub ports, so a route test exercises the same path the panel does. */
+const actions = (engine: Record<string, unknown> = {}) => new Actions({
+  engine: { retryTicket: () => ({}), stopTicket: () => ({}), reevaluate: () => true, unsubscribe: () => true, ...engine } as never,
+  main: { attach: () => ({}), note: () => ({}), requestStatus: () => true } as never,
+  store: { triggers: { get: () => undefined } } as never,
+  quietly: run => run(),
+  requestPass: () => {},
+})
 type Handler = (req: unknown, res: unknown) => Promise<void>
 type Headers = Record<string, string | undefined>
 /** Mount management HTTP routes on a fake web server and return a request helper that includes default panel headers. */
@@ -29,6 +38,7 @@ it('answers each kind of failure with its own status', async () => {
   const saves: unknown[] = []
   const call = serve({
     store: { tickets: { get: () => undefined }, blockRevision: () => 0 },
+    actions: actions(),
     sources: { instances: () => [{ id: 'github' }] },
     settings: { save: async (...args: unknown[]) => {
       saves.push(args)
@@ -62,6 +72,7 @@ it('decodes path parameters and parses each route\'s query', async () => {
       read: { decisions: (filter: unknown, offset: number, limit: number) => { seen.push({ filter, offset, limit }); return { items: [], more: false } } } },
     links: () => () => ({ url: '', label: { zh: '', en: '' } }),
     engine: { unsubscribe: (key: string) => { seen.push(key); return true } },
+    actions: actions({ unsubscribe: (key: string) => { seen.push(key); return true } }),
     sessions: { delivery: async () => 'injected' },
   })
   expect(await call('POST', `threads/${encodeURIComponent('feishu:oc_1:om/root')}/unsubscribe`)).toMatchObject({ status: 200, body: { context_delivery: 'injected' } })
@@ -71,7 +82,7 @@ it('decodes path parameters and parses each route\'s query', async () => {
 })
 
 it('answers only a same-origin request from the panel on the loopback address', async () => {
-  const call = serve({ sessions: { delivery: async () => 'injected' }, engine: { unsubscribe: () => true } })
+  const call = serve({ sessions: { delivery: async () => 'injected' }, engine: { unsubscribe: () => true }, actions: actions() })
   const post = (headers: Headers) => call('POST', 'threads/github%3A1/unsubscribe', undefined, headers)
   for (const headers of [{ 'x-orchestrator-request': undefined }, { host: 'evil.example:3082' }, { host: '127.0.0.1:9999' },
     { origin: 'http://evil.example' }, { host: 'localhost:3082', origin: 'http://127.0.0.1:3082' }]) {

@@ -25,6 +25,7 @@ import { AcpExecutor } from '../executor/acp.ts'
 import { DispatchExecutor } from '../executor/dispatch.ts'
 import { WorkerMcpServer } from './mcp-server.ts'
 import { ticketCard } from './cards.ts'
+import { Actions } from './actions.ts'
 import { MainAssessor } from './assessment.ts'
 import { KV } from '../kv.ts'
 import { Store } from './store/index.ts'
@@ -75,6 +76,7 @@ export class Runtime extends Service implements SourceHost {
   readonly executor: DispatchExecutor
   readonly mcp: WorkerMcpServer
   readonly assessor: MainAssessor
+  readonly actions: Actions
   readonly outbox: Outbox
   readonly engine: Engine
   readonly passes: Passes
@@ -220,10 +222,12 @@ export class Runtime extends Service implements SourceHost {
         get deployment() { return setup.deployment }, configured: () => setup.configured(),
         get setupProblem() { return setup.problem }, get feishuProblem() { return setup.feishuProblem }, receive: trigger => passes.receive(trigger),
         activity: () => activity }
-      this.toolHost = { context: ctx, engine, store, prompts, sessions, settings: this.settings, assessor, resources,
+      this.actions = new Actions({ engine, main: engine, store, requestPass: () => { this.passes.request() },
+        quietly: run => { this.quiet++; try { return run() } finally { this.quiet-- } } })
+      this.toolHost = { context: ctx, engine, store, prompts, sessions, settings: this.settings, assessor, resources, actions: this.actions,
         get github() { return runtime.context({ kind: 'github', health: ['github'] }) },
         requestPass: () => { passes.request() }, sendReplies: () => outbox.sent(),
-        quietly: run => { this.quiet++; try { return run() } finally { this.quiet-- } } }
+      }
       this.ready = this.initialize()
     } catch (error) {
       // Release the database and state lock if initialization fails so an in-process restart can reacquire them.
@@ -282,8 +286,8 @@ export class Runtime extends Service implements SourceHost {
   }
   private httpHost(): HttpHost {
     const runtime = this
-    const { store, sources, prompts, sessions, settings, engine, executor, health, machine, mainSessionId, ready, sourceLinks, setup, passes } = this
-    return { store, sources, prompts, sessions, settings, engine, executor, health, machine, mainSessionId, ready, sourceLinks,
+    const { store, sources, prompts, sessions, settings, engine, actions, executor, health, machine, mainSessionId, ready, sourceLinks, setup, passes } = this
+    return { store, sources, prompts, sessions, settings, engine, actions, executor, health, machine, mainSessionId, ready, sourceLinks,
       get deployment() { return setup.deployment },
       get setupProblem() { return setup.problem }, get feishuProblem() { return setup.feishuProblem },
       configured: () => setup.configured(), links: () => runtime.links(), ticketEnvironment: ticket => runtime.ticketEnvironment(ticket),
