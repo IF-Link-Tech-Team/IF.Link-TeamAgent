@@ -10,18 +10,19 @@
  * candidates, and `meta.allowRules` names the one rule they may be accepted under.
  */
 import type { Context } from '@deepseek-ai/cordis'
-import { readdir, readFile, stat } from 'node:fs/promises'
-import { join } from 'node:path'
 import { z } from 'zod'
 import { key, latestReport, ticketStage, type OutboundMessage, type ReceiveResult, type Ticket, type Trigger } from '../core/index.ts'
 import { checkedImText } from '../infra/text.ts'
 import { family, record, type Key } from '../kv.ts'
 import { sourceContext, type Activity, type SourceContext } from './host.ts'
 import type { ChannelLink, SourceKind } from './kind.ts'
-import { beatDue, BEAT_POLICY, buildChecklist, clockLabel, deadlineLines, dueDay, dueFollows, emptyChecklist, fireWindow, JobSchema,
-  lastScheduledAt, nextFireAt, stampOf, type ChecklistDraft, type ChecklistEnded, type ChecklistFollow, type ChecklistTicket } from './scheduler-job.ts'
+import { draftEntries, memoryMtime, projectNotes } from './scheduler-brief.ts'
+import { beatDue, BEAT_POLICY, buildChecklist, clockLabel, deadlineLines, dueFollows, emptyChecklist, fireWindow, JobSchema,
+  lastScheduledAt, nextFireAt, stampOf, type ChecklistEnded, type ChecklistTicket } from './scheduler-job.ts'
 
 export { BEAT_POLICY, beatDue, buildChecklist, emptyChecklist, JobSchema, ScheduleSchema, stampOf } from './scheduler-job.ts'
+// The brief readers keep their old import path so a test or a caller needs no change while the code moves apart.
+export { draftEntries, memoryMtime, projectNotes } from './scheduler-brief.ts'
 
 export const SOURCE = 'scheduler'
 /** One tick per minute: a job may fire up to a minute late, which no team notice cares about, and it costs no I/O. */
@@ -110,56 +111,6 @@ export function endedEntries(tickets: readonly Ticket[], now: number, hours: num
     const at = ticket.ended ? Date.parse(ticket.ended.at) : Number.NaN
     return Number.isFinite(at) && at >= floor ? [{ name: displayName(ticket), outcome: ticket.ended?.outcome }] : []
   })
-}
-
-/** The lines of the section whose heading contains `heading`, without bullets or blank entries. */
-function sectionOf(body: string, heading: string): string[] {
-  const pattern = new RegExp(`##\\s*[^\\n]*${heading}[^\\n]*\\n+([\\s\\S]*?)(?=\\n##\\s|$)`)
-  return (pattern.exec(body)?.[1] ?? '').split('\n')
-    .map(text => text.replace(/^[-*\s]+/, '').trim())
-    .filter(text => text.length > 0)
-}
-
-/** The part of a draft nobody has decided, which is one part a heartbeat needs to know about. */
-const unresolvedOf = (body: string): string | undefined => sectionOf(body, '没解决')[0]?.slice(0, 80)
-
-/** The follow-ups a draft promises, each with the day it comes due; a line with no day is dropped, not shown forever. */
-const followsOf = (body: string, now: number, timeZone: string): ChecklistFollow[] =>
-  sectionOf(body, '要回来跟进').flatMap(line => {
-    const due = dueDay(line, now, timeZone)
-    return due ? [{ due, what: line.replace(/^\d{4}-\d{1,2}-\d{1,2}\s*/, '').slice(0, 60) }] : []
-  })
-
-/**
- * The drafts waiting for Dreaming: what nobody has decided, the follow-ups they promise, and when the folder last
- * changed. A missing folder is not an error, just no drafts.
- */
-export async function draftEntries(memoryDir: string, now: number, timeZone: string):
-Promise<{ entries: ChecklistDraft[]; follows: ChecklistFollow[]; mtime?: number | undefined }> {
-  const dir = join(memoryDir, 'drafts', 'inbox')
-  const mtime = await stat(dir).then(found => found.mtimeMs).catch(() => undefined)
-  const names = (await readdir(dir).catch(() => [] as string[])).filter(name => name.endsWith('.md') && !name.startsWith('_')).slice(0, 5)
-  const entries: ChecklistDraft[] = []
-  const follows: ChecklistFollow[] = []
-  for (const name of names) {
-    const body = await readFile(join(dir, name), 'utf8').catch(() => '')
-    entries.push({ name: name.replace(/\.md$/, '').replace(/^[0-9a-f]{8}-/, ''), unresolved: unresolvedOf(body) })
-    follows.push(...followsOf(body, now, timeZone))
-  }
-  return { entries, follows, mtime }
-}
-
-/** PROJECTS.md as stored, or empty when the deployment keeps none; only its dated lines reach a card. */
-export async function projectNotes(memoryDir: string): Promise<string> {
-  return readFile(join(memoryDir, 'PROJECTS.md'), 'utf8').catch(() => '')
-}
-
-/** When the team memory last changed, or undefined when none of its files exist. */
-export async function memoryMtime(memoryDir: string): Promise<number | undefined> {
-  const stamps = await Promise.all(['TEAM.md', 'PROJECTS.md', 'HEADINGS.md']
-    .map(name => stat(join(memoryDir, name)).then(found => found.mtimeMs).catch(() => 0)))
-  const newest = Math.max(0, ...stamps)
-  return newest > 0 ? newest : undefined
 }
 
 /** Sends a result into the job's chat; `+messages-send` carries an idempotency key, so a retry cannot double-post. */

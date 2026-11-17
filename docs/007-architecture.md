@@ -395,6 +395,7 @@ Some generic modules still refer directly to GitHub or Feishu:
 | `src/sources/clawchat.ts` | The ClawChat kind and plugin entry, exported as `./clawchat-watch`: pairing from the owner's code, the live connection, and the Channel that replies through it |
 | `src/sources/scheduler.ts` | The Scheduler kind and plugin entry, exported as `./scheduler-watch`: turns the local clock into senderless Triggers confined to `meta.allowRules`, and sends results through `+messages-send` |
 | `src/sources/scheduler-job.ts` | The Scheduler's pure rules: schedule shapes with their next and last occurrence, the change stamp, the heartbeat judgement, and the index card a heartbeat reads |
+| `src/sources/scheduler-brief.ts` | The team memory as a heartbeat sees it: the draft folder with its unresolved parts and promised follow-ups, the dated lines of `PROJECTS.md`, and when the memory last changed |
 | `src/sources/clawchat-protocol.ts` | The ClawChat agent-side protocol: invite redemption and token refresh, the Protocol v2 WebSocket with its heartbeat and acks, and the frames as inbound messages |
 | `src/sources/feishu.ts` | The Feishu kind and plugin entry, exported as `./feishu-watch` |
 | `src/sources/feishu-config.ts` | The Feishu Source's configuration schema and the sweep cadences (`feishuTiming`), kept apart from the plugin entry so the loops can read them without a cycle |
