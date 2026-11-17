@@ -1,11 +1,11 @@
 [Unit]
 Description=IFLink TeamAgent Feishu API request counter (local TLS proxy)
-Documentation=file:%h/TeamAgent/dsh-superagent-prototype-IF.Link/tools/feishu-counter/README.md
+Documentation=file:%h/TeamAgent/dsh-superagent/tools/feishu-counter/README.md
 After=network-online.target
 
 [Service]
 Type=simple
-ExecStart=%h/TeamAgent/dsh-superagent-prototype-IF.Link/tools/feishu-counter/counter.py --port 18080 --role-port 18081=orchestrator --role-port 18082=worker --role-port 18083=dreaming
+ExecStart=%h/TeamAgent/dsh-superagent/tools/feishu-counter/counter.py --port 18080 --role-port 18081=orchestrator --role-port 18082=worker --role-port 18083=dreaming
 Restart=always
 RestartSec=3
 Environment=PYTHONUNBUFFERED=1

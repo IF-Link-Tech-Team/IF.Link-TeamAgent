@@ -3,3 +3,7 @@ lib/
 .artifacts/
 .env
 coverage/
+
+# Python 构建产物
+__pycache__/
+*.pyc
