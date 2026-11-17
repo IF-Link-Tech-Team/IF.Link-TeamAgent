@@ -8,7 +8,7 @@ import type { ChannelLink, ChannelLinks, SourceInstance, SourceKind, TriggerCont
 
 /**
  * Manages registered SourceKind plugins, validates their instance and policy configurations, and implements SourceScope for the Engine.
- * Claims each registered kind's health entries on HealthBoard and mediates access to source channels, links, environment variables, and thread context readers for Runtime, Settings, Outbox, and MasterAssessor.
+ * Claims each registered kind's health entries on HealthBoard and mediates access to source channels, links, environment variables, and thread context readers for Runtime, Settings, Outbox, and MainAssessor.
  */
 export class SourceRegistry implements SourceScope {
   private readonly kinds = new Map<string, SourceKind>()

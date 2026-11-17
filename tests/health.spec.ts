@@ -16,7 +16,7 @@ async function at(ms: number) {
 async function failThrice() { await at(2000); await at(6000) }
 
 it('reports a relay in error once it failed three times, clears it once the relay reached the main Session, and leaves the runtime ready', async () => {
-  const steer = h.agents.get(h.runtime.masterId)!.steer
+  const steer = h.agents.get(h.runtime.mainSessionId)!.steer
   for (let count = 0; count < 3; count++) steer.mockImplementationOnce(() => { throw new Error('session busy') })
   h.runtime.sessions.relay('r1', JSON.stringify({ kind: 'note' }))
   await h.runtime.idle()
@@ -28,7 +28,7 @@ it('reports a relay in error once it failed three times, clears it once the rela
 })
 
 it('keeps a failing relay\'s error while replies recover, and a failing reply\'s error while relays recover', async () => {
-  const master = h.agents.get(h.runtime.masterId)!
+  const master = h.agents.get(h.runtime.mainSessionId)!
   const lark = vi.mocked(Commands.prototype.lark)
   const reply = (id: string) => { h.runtime.outbox.send({ id, channel: feishu('9', 'x').channel!, text: '已合并。', kind: 'notice' }) }
   master.steer.mockImplementation(() => { throw new Error('master gone') })
@@ -49,7 +49,7 @@ it('keeps a failing relay\'s error while replies recover, and a failing reply\'s
 })
 
 it('reports a notice the main Session did not receive three times, until one reaches it, and injects each notice once', async () => {
-  const inject = h.agents.get(h.runtime.masterId)!.inject
+  const inject = h.agents.get(h.runtime.mainSessionId)!.inject
   for (let count = 0; count < 3; count++) inject.mockImplementationOnce(() => { throw new Error('session busy') })
   await h.runtime.settings.pause(true, 'panel')
   await failThrice()

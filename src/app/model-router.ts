@@ -26,7 +26,7 @@ declare module '@deepseek-ai/dsh-session' {
 }
 
 /** Which chain a Session draws on: the main Session routes, every other managed Session executes. */
-export type RouteRole = 'router' | 'worker'
+export type RouteRole = 'main' | 'worker'
 /** One row of a role's chain with its live cooldown state, as the management panel shows it. */
 export interface RouteState { role: RouteRole; provider: string; model: string; state: 'ready' | 'cooling'; until?: string }
 /** Failures that mean the route is unavailable rather than the request being wrong. */
@@ -60,7 +60,7 @@ export interface ModelRouterHost {
   readonly context: Context
   readonly store: Pick<Store, 'settings'>
   /** The main Session's id: its chain is the router's, every other Session's is the Executor's. */
-  readonly masterId: string
+  readonly mainSessionId: string
   /** The `model-fallback` health entry; it reports an error while a role runs off its primary route. */
   readonly health: HealthEntry
 }
@@ -145,7 +145,7 @@ export class ModelRouter {
   hasRoute(role: RouteRole): boolean { return this.chain(role).some(route => this.closed(route)) }
 
   /** Which chain the Session draws on: only the main Session routes. */
-  roleOf(agent: Agent): RouteRole { return agent.id === this.host.masterId ? 'router' : 'worker' }
+  roleOf(agent: Agent): RouteRole { return agent.id === this.host.mainSessionId ? 'main' : 'worker' }
 
   /** The route the next request of `role` should use, or `null` when its chain is empty. */
   preferred(role: RouteRole): RoleModel | null {
@@ -199,14 +199,14 @@ export class ModelRouter {
   /** The saved primary of one role, which may be absent when the role inherits the DSH default model. */
   private primary(role: RouteRole): RoleModel | null {
     const settings = this.settings()
-    return role === 'router' ? settings.eval.model : settings.executor.model
+    return role === 'main' ? settings.eval.model : settings.executor.model
   }
 
   /** The ordered routes of one role: primary first, then the saved fallbacks. */
   private chain(role: RouteRole): RoleModel[] {
     const settings = this.settings()
-    const model = role === 'router' ? settings.eval.model : settings.executor.model
-    const fallbacks = role === 'router' ? settings.eval.fallbacks : settings.executor.fallbacks
+    const model = role === 'main' ? settings.eval.model : settings.executor.model
+    const fallbacks = role === 'main' ? settings.eval.fallbacks : settings.executor.fallbacks
     return model ? [model, ...fallbacks] : [...fallbacks]
   }
 
@@ -234,13 +234,13 @@ export class ModelRouter {
 
   /** Whether the main Session currently runs off its primary route, which makes its assessment provisional. */
   degraded(): boolean {
-    const primary = this.primary('router')
+    const primary = this.primary('main')
     return primary !== null && !this.closed(primary)
   }
 
   /** Every chain route of both roles with its cooldown state, for the management panel. */
   routeStates(): RouteState[] {
-    return (['router', 'worker'] as const).flatMap(role => this.chain(role).map(route => {
+    return (['main', 'worker'] as const).flatMap(role => this.chain(role).map(route => {
       const entry = this.cooling.get(routeKey(route))
       const cooling = entry !== undefined && entry.until > Date.now()
       return { role, provider: route.provider, model: route.model, state: cooling ? 'cooling' as const : 'ready' as const,
@@ -250,13 +250,13 @@ export class ModelRouter {
 
   /** Mirror the routing state into the health board; a degraded main Session is an error the panel and the monitor both show. */
   private report(): void {
-    const primary = this.primary('router')
+    const primary = this.primary('main')
     const cooling = [...this.cooling.values()].filter(entry => entry.until > Date.now())
     if (!primary || cooling.length === 0) {
       this.host.health.set({ state: 'ready', detail: 'Every model route in both backup chains is available', at: new Date().toISOString() })
       return
     }
-    const active = cooling.find(entry => entry.role === 'router')
+    const active = cooling.find(entry => entry.role === 'main')
     this.host.health.set({ state: 'error', at: new Date().toISOString(), detail: active
       ? `The main Session runs on a backup model: ${active.code} on one of its routes; ${cooling.length} route(s) cooling down`
       : `${cooling.length} model route(s) cooling down after a provider failure` })
@@ -290,7 +290,7 @@ export class ModelRouter {
     if (this.disposed || this.probing) return
     // Cooldowns lapse with the clock, not with a failure: refresh the health entry so a recovered provider clears the alert.
     this.report()
-    const primary = this.primary('router')
+    const primary = this.primary('main')
     if (primary === null || this.closed(primary)) return
     this.probing = true
     try {

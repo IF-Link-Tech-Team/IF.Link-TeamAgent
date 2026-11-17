@@ -67,7 +67,7 @@ export interface ResourceHost {
   readonly pages: TextCache
   readonly prompts: Pick<Prompts, 'current' | 'version' | 'history' | 'skills' | 'defaultChanged'>
   readonly commands: Commands
-  readonly masterId: string
+  readonly mainSessionId: string
   readonly context: Context
   /** Directory holding the team memory files and their `journal/` entries; each ticket also copies the memory files in. */
   readonly memoryDir: string
@@ -358,7 +358,7 @@ export async function readResource(host: ResourceHost, resource: string, offset:
   const name = resource.replace(/^event\//, 'trigger/').replace(/^task\//, 'ticket/').replace(/^observation\//, 'decision/')
   const route = ROUTES.find(([route]) => route.endsWith('/') ? name.startsWith(route) : name === route)
   if (!route) throw new Error('Unknown context resource')
-  const sessionId = ticketId ? workerSessionId(ticketId) : host.masterId
+  const sessionId = ticketId ? workerSessionId(ticketId) : host.mainSessionId
   const rest = route[0].endsWith('/') ? name.slice(route[0].length) : ''
   return route[1]({ host, resource: name, rest, offset, sessionId, ...limit ? { limit } : {}, ...ticketId ? { ticketId } : {},
     ...signal ? { signal } : {} })

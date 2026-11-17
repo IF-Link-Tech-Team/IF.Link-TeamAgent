@@ -94,7 +94,7 @@ function membership(error: unknown): unknown {
 }
 /**
  * Executes gh, lark-cli, and git subprocesses with deployment account credentials, timeouts, and abort signals.
- * Restricts GitHub API calls to the configured repository and translates CLI failures into CliError instances for Sources, MasterAssessor, Outbox, and Settings.
+ * Restricts GitHub API calls to the configured repository and translates CLI failures into CliError instances for Sources, MainAssessor, Outbox, and Settings.
  */
 export class Commands {
   /**

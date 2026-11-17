@@ -41,7 +41,7 @@ type Task = { kind: EffectKind; key: string; done: Promise<void> }
 
 /**
  * Durable SQLite-backed queue that persists side effects inside command transactions and dispatches them after commit.
- * Coordinates per-kind handlers, concurrency limits, exponential backoff, and health reporting for MasterAssessor, DshExecutor, Sessions, and Outbox.
+ * Coordinates per-kind handlers, concurrency limits, exponential backoff, and health reporting for MainAssessor, DshExecutor, Sessions, and Outbox.
  */
 export class Effects {
   private readonly handlers = new Map<EffectKind, Handler<never>>()

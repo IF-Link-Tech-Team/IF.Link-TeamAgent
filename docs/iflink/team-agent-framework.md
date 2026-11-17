@@ -65,7 +65,7 @@ Runtime（组合根，无领域规则）
  │    └── Replies   回执 / 回答 / 结果 / 待人工（都经 Outbox）
  ├── Policy（设置 schema + 门闸 + Mandate 复核 + 版本哈希）
  ├── SourceRegistry（插件：kind + instance + Channel + 健康项）
- ├── MasterAssessor（让主 Session 做研判）
+ ├── MainAssessor（让主 Session 做研判）
  ├── DshExecutor（一单一 Session 一目录，WorkerSlots 限并发）
  ├── Effects（持久副作用队列：assessment/launch/delivery/relay/notice/reply）
  ├── Store（单 SQLite，触发/线程/工单/决策/回执/effect/kv）

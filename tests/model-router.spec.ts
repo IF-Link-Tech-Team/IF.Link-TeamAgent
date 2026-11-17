@@ -7,8 +7,8 @@ type Route = { provider: string; model: string }
 const route = (provider: string, model: string): Route => ({ provider, model })
 const A = route('alpha', 'alpha-1'), B = route('beta', 'beta-1'), C = route('gamma', 'gamma-1')
 
-const settings = (role: 'router' | 'worker', primary: Route, fallbacks: Route[]): Settings =>
-  SettingsSchema.parse(role === 'router' ? { eval: { model: primary, fallbacks } } : { executor: { model: primary, fallbacks } })
+const settings = (role: 'main' | 'worker', primary: Route, fallbacks: Route[]): Settings =>
+  SettingsSchema.parse(role === 'main' ? { eval: { model: primary, fallbacks } } : { executor: { model: primary, fallbacks } })
 
 interface Agent {
   id: string
@@ -38,7 +38,7 @@ function harness(initial: Settings, probe: (route: Route) => 'ok' | 'fail' = () 
     },
   }
   const health = { state: undefined as unknown, set: (value: unknown) => { health.state = value }, get: () => undefined, release: () => {} }
-  const router = new ModelRouter({ context: ctx as never, store: { settings: () => current }, masterId: 'master', health: health as never },
+  const router = new ModelRouter({ context: ctx as never, store: { settings: () => current }, mainSessionId: 'master', health: health as never },
     { cooldownMs: 60_000, probeMs: 30_000 })
   router.install()
   const request = async (who: Agent, resolved: Route) => {
@@ -62,7 +62,7 @@ afterEach(() => { vi.useRealTimers() })
 
 describe('model router', () => {
   it('moves the main Session to the first fallback after a provider failure, and back once the cooldown passes', async () => {
-    const h = harness(settings('router', A, [B]))
+    const h = harness(settings('main', A, [B]))
     const master = agent('master', A)
     expect(await h.request(master, A)).toEqual(A)
     expect(await h.error(master, 'alpha', 'SERVER')).toEqual({ kind: 'retry' })
@@ -75,7 +75,7 @@ describe('model router', () => {
   })
 
   it('leaves a Session alone while its primary route is healthy and when the failure is not a provider failure', async () => {
-    const h = harness(settings('router', A, [B]))
+    const h = harness(settings('main', A, [B]))
     const master = agent('master', A)
     expect(await h.request(master, A)).toEqual(A)
     expect(await h.error(master, 'alpha', 'CONTEXT_WINDOW_EXCEEDED')).toBeUndefined()
@@ -83,14 +83,14 @@ describe('model router', () => {
   })
 
   it('fails over when a route rejects the key or reports an exhausted subscription', async () => {
-    const h = harness(settings('router', A, [B]))
+    const h = harness(settings('main', A, [B]))
     const master = agent('master', A)
     expect(await h.error(master, 'alpha', 'AUTH')).toEqual({ kind: 'retry' })
     expect(await h.request(master, A)).toEqual(B)
   })
 
   it('walks the rest of the chain and stops when every route is cooling down', async () => {
-    const h = harness(settings('router', A, [B, C]))
+    const h = harness(settings('main', A, [B, C]))
     const master = agent('master', A)
     expect(await h.error(master, 'alpha', 'RATE_LIMIT')).toEqual({ kind: 'retry' })
     expect(await h.request(master, A)).toEqual(B)
@@ -110,7 +110,7 @@ describe('model router', () => {
   })
 
   it('probes the main Session primary while it cools down and reports recovery', async () => {
-    const h = harness(settings('router', A, [B]))
+    const h = harness(settings('main', A, [B]))
     const master = agent('master', A)
     await h.error(master, 'alpha', 'SERVER')
     expect(h.router.degraded()).toBe(true)
@@ -121,7 +121,7 @@ describe('model router', () => {
   })
 
   it('keeps the main Session on its backup while the probe fails', async () => {
-    const h = harness(settings('router', A, [B]), () => 'fail')
+    const h = harness(settings('main', A, [B]), () => 'fail')
     const master = agent('master', A)
     await h.error(master, 'alpha', 'SERVER')
     await vi.advanceTimersByTimeAsync(31_000)
@@ -130,7 +130,7 @@ describe('model router', () => {
   })
 
   it('stops switching after one step used every route in the chain', async () => {
-    const h = harness(settings('router', A, [B]))
+    const h = harness(settings('main', A, [B]))
     const master = agent('master', A)
     expect(await h.error(master, 'alpha', 'SERVER', 1, 1)).toEqual({ kind: 'retry' })
     // The same step cannot fail over twice: two routes were already tried.
@@ -142,10 +142,10 @@ describe('model router', () => {
   it('lists both chains with their cooldown state for the panel', async () => {
     const h = harness(SettingsSchema.parse({ eval: { model: A, fallbacks: [B] }, executor: { model: A, fallbacks: [C] } }))
     expect(h.router.routeStates().map(state => `${state.role}:${state.provider}/${state.model}:${state.state}`))
-      .toEqual(['router:alpha/alpha-1:ready', 'router:beta/beta-1:ready', 'worker:alpha/alpha-1:ready', 'worker:gamma/gamma-1:ready'])
+      .toEqual(['main:alpha/alpha-1:ready', 'main:beta/beta-1:ready', 'worker:alpha/alpha-1:ready', 'worker:gamma/gamma-1:ready'])
     await h.error(agent('master', A), 'alpha', 'SERVER')
     // Both chains lead with the same route, so one failure cools it for both roles.
     expect(h.router.routeStates().filter(state => state.state === 'cooling').map(state => `${state.role}:${state.model}`))
-      .toEqual(['router:alpha-1', 'worker:alpha-1'])
+      .toEqual(['main:alpha-1', 'worker:alpha-1'])
   })
 })

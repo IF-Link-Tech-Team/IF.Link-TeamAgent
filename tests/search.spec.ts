@@ -126,12 +126,12 @@ it('registers the tool for the main Session only, with read paths orchestrator_r
   const h = await startRuntime()
   try {
     const { ticket, trigger } = await h.acceptedTicket(feishu('1', '@bot 修一下回归'))
-    expect(h.tools.get(h.runtime.masterId)!.has('orchestrator_search')).toBe(true)
+    expect(h.tools.get(h.runtime.mainSessionId)!.has('orchestrator_search')).toBe(true)
     expect(h.tools.get(`worker-${ticket.id}`)!.has('orchestrator_search')).toBe(false)
-    const { matches } = await h.runTool(h.runtime.masterId, 'orchestrator_search', { query: '回归', in: 'trigger' }) as
+    const { matches } = await h.runTool(h.runtime.mainSessionId, 'orchestrator_search', { query: '回归', in: 'trigger' }) as
       { matches: { kind: string; ref: string; read: string; snippet: string }[] }
     expect(matches.map(match => match.read)).toEqual([`trigger/${trigger.id}`])
     expect(matches[0]!.snippet).toContain('回归')
-    expect(await h.runTool(h.runtime.masterId, 'orchestrator_read', { resource: matches[0]!.read })).toMatchObject({ trigger_id: trigger.id })
+    expect(await h.runTool(h.runtime.mainSessionId, 'orchestrator_read', { resource: matches[0]!.read })).toMatchObject({ trigger_id: trigger.id })
   } finally { await h.stop() }
 })

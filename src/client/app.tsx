@@ -98,7 +98,7 @@ function SearchResults({ result, query, onClose }: { result: SearchView; query: 
   </div>
 }
 
-function Header({ masterId }: { masterId: string | undefined }) {
+function Header({ mainSessionId }: { mainSessionId: string | undefined }) {
   const { t, call, openSession, notify } = usePanel()
   const [glossary, setGlossary] = useState(false)
   const [query, setQuery] = useState('')
@@ -131,8 +131,8 @@ function Header({ masterId }: { masterId: string | undefined }) {
       </form>
       <Button variant="ghost" size="sm" icon={<Icon name="question" />} aria-label={t('glossary')} title={t('glossary')} aria-haspopup="dialog"
         onClick={() => setGlossary(true)} />
-      <Button variant="outline" size="sm" icon={<Icon name="session" size={14} />} disabled={!masterId}
-        onClick={() => { if (masterId) openSession(masterId).catch(failure => notify(errorText(failure))) }}>{t('openMaster')}</Button>
+      <Button variant="outline" size="sm" icon={<Icon name="session" size={14} />} disabled={!mainSessionId}
+        onClick={() => { if (mainSessionId) openSession(mainSessionId).catch(failure => notify(errorText(failure))) }}>{t('openMaster')}</Button>
     </div>
     <Glossary open={glossary} onClose={() => setGlossary(false)} />
   </header>
@@ -154,13 +154,13 @@ function Pages({ route, openTab, deploymentForm }: { route: Route; openTab: (tab
         paused={!!state?.paused} />
       case 'execution': return route.id !== undefined ? <TicketPage key={route.id} id={route.id} />
         : state ? <ExecutionStatus filter={route.query?.filter ?? 'open'} state={state} reload={reload} /> : waiting
-      case 'settings': return state ? <SettingsPage key={state.masterId} group={route.query.group} query={route.query} state={state}
+      case 'settings': return state ? <SettingsPage key={state.mainSessionId} group={route.query.group} query={route.query} state={state}
         deploymentForm={deploymentForm} /> : waiting
     }
   })()
   return <div className="dt-page">
     <div className="dt-column">
-      <Header masterId={state?.masterId} />
+      <Header mainSessionId={state?.mainSessionId} />
       {error && state && <p className="dt-error" role="status">{error.message}</p>}
       <SegmentedTabs className="dt-tabs" label={t('pagesLabel')} value={route.page} onChange={openTab}
         items={TABS.map(value => ({ value, label: t(`tab.${value}`), id: `dt-tab-${value}`, panelId: 'dt-page' }))} />

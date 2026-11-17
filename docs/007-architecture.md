@@ -14,7 +14,7 @@ flowchart TB
   engine[Engine] -->|Repositories| store[Store]
   engine -->|Policy| policy[Policy]
   engine -->|SourceScope| registry[SourceRegistry]
-  engine -->|Assessor| assessor[MasterAssessor]
+  engine -->|Assessor| assessor[MainAssessor]
   engine -->|Executor| executor[DshExecutor]
   assessor -->|decide| engine
   engine -->|Outbox| outbox[Outbox]
@@ -172,7 +172,7 @@ Failures retry with exponential backoff. Throwing `Later` defers work without co
 
 | Kind | Handler | Does | At once | Retry |
 | --- | --- | --- | --- | --- |
-| `assessment` | MasterAssessor | Steers an Eval's candidate card into the main Session's turn, then tells the Engine it was delivered, which starts the Eval's deadline | 4, none while paused | 2 s doubling to 60 s |
+| `assessment` | MainAssessor | Steers an Eval's candidate card into the main Session's turn, then tells the Engine it was delivered, which starts the Eval's deadline | 4, none while paused | 2 s doubling to 60 s |
 | `launch` | DshExecutor | Launches a pending Assignment: prepare command, Executor Session, assignment message | The free worker slots, none while paused | A passing failure of the model provider or the network runs again after 5 s doubling to 300 s, three times; any other failure, and a failed prepare command, fails its Ticket. One held by a pause or by full worker slots tries again after 5 s |
 | `delivery` | DshExecutor | Hands a Ticket's waiting Inputs to its running Assignment, in order | 4, none while paused | 2 s doubling to 60 s; one that waits for a worker slot tries again after 2 s |
 | `relay` | Sessions | Steers a worker's report or question, or a person's follow-up, into the main Session's turn | 1, in queue order | 2 s doubling to 60 s |
@@ -215,9 +215,9 @@ Transient provider and network failures get three retries. Launches use effect b
 
 `chooseRoute` (`src/app/dispatch.ts`) turns the type and difficulty into a family and model using `Settings.dispatch`; it never names a model itself. `WorkerMcpServer` (`src/app/mcp-server.ts`) serves the Ticket's `orchestrator_*` tools over the Unix socket, and `src/worker-mcp.ts` is the stdio relay a harness starts; without the launch's `TEAMAGENT_MCP_*` variables it serves an empty tool list, so a shared config file stays harmless outside a Ticket. An ACP turn that ends without a status becomes a `waiting` Report; a blocked, failed or dropped Report closes the run.
 
-### MasterAssessor
+### MainAssessor
 
-`MasterAssessor` (`src/app/assessment.ts`) lets the main Session assess proactive candidates. `request` queues an assessment effect; `release` drops cached state when its Eval ends.
+`MainAssessor` (`src/app/assessment.ts`) lets the main Session assess proactive candidates. `request` queues an assessment effect; `release` drops cached state when its Eval ends.
 
 Its `context`, `read` and `decide` methods serve `orchestrator_eval`, `orchestrator_eval_read` and `orchestrator_eval_decide`. They provide bounded Thread context through `SourceRegistry.threadContext`, repository context, and decision submission. A kind without a context reader supplies only the Trigger and batch.
 
@@ -290,7 +290,7 @@ Some generic modules still refer directly to GitHub or Feishu:
 - `src/app/resources.ts` reads the `feishu/` and `github/` originals; `src/app/cards.ts` uses `pullOf` for Ticket cards.
 - Runtime sends `pullEndNotices` for merged or closed Tickets.
 - Executor tools bind reported pull requests with `readPull` and `claimPull`, using the GitHub context exposed by Runtime.
-- MasterAssessor reads repository files with `readRepositoryPath`.
+- MainAssessor reads repository files with `readRepositoryPath`.
 - Sessions and Prompts register built-in skills only for GitHub and Feishu. Migration converts their schema-10 records.
 - Setup probes only GitHub and Feishu account fields (`SETUP_FIELDS`). Only those Sources receive account setup problems through `SourceContext.problem`.
 
@@ -346,7 +346,7 @@ Some generic modules still refer directly to GitHub or Feishu:
 | `src/app/retry-health.ts` | `RetryHealth`: which Sessions wait on a model budget retry, for the `models` health entry |
 | `src/app/role-models.ts` | Resolves the Eval and Executor models, and seeds a new Session with its role's model |
 | `src/app/model-router.ts` | `ModelRouter`: each role's fallback chain, a cooldown per failed route, the main Session's recovery probe, and the route states the panel shows |
-| `src/app/assessment.ts` | The MasterAssessor, the assessment schema and the window `orchestrator_eval` answers |
+| `src/app/assessment.ts` | The MainAssessor, the assessment schema and the window `orchestrator_eval` answers |
 | `src/app/execution-environment.ts` | The execution environment: its variables, a Ticket's values, the directory root and the lines of the prompt section, which `src/app/prompts.ts` fills into its template |
 | `src/app/source-context.ts` | `sourceContextOf`: each Source kind's `SourceContext` |
 | `src/app/links.ts` | `sourceLink`, the page of a Trigger's message, and `candidateCard` |
@@ -441,7 +441,7 @@ Some generic modules still refer directly to GitHub or Feishu:
 | `tests/feishu-reaction.spec.ts` | The mark a Feishu Channel puts on a message: the taken-up emoji, the finished one that replaces it, a person's equal reaction left alone, and a recalled message that takes none |
 | `tests/feishu-read.spec.ts`, `tests/github-read.spec.ts` | Feishu and GitHub reads |
 | `tests/admission-context.spec.ts`, `tests/feishu-image.spec.ts` | The Thread window of assessments, and Feishu image reads |
-| `tests/assessment.spec.ts` | What the MasterAssessor keeps per Eval, and when it lets go |
+| `tests/assessment.spec.ts` | What the MainAssessor keeps per Eval, and when it lets go |
 | `tests/background.spec.ts` | Waiting for a worker's shell jobs and subagents: an end that woke it, and a host that stops |
 | `tests/bundle-patch.spec.ts` | The bundle's patch, read as DeepSeek Harness reads it, and the agent preset of Executor Sessions it defines |
 | `tests/effects.spec.ts` | The effect queue: coalescing, limits, retries with backoff, health and shutdown |
@@ -545,7 +545,7 @@ The main Session also has DeepSeek Harness's `skill`, `bash`, `read`, `read_imag
 
 ### Presets and wait limits
 
-New main Sessions use `dsh-superagent-router` (`ROUTER_PRESET`). Shell commands and job waits return after 5 seconds. If the Web UI selects another preset before the first turn, `Sessions` restores this preset, or `WORKER_PRESET` for a worker.
+New main Sessions use `dsh-superagent-router` (`MAIN_PRESET`). Shell commands and job waits return after 5 seconds. If the Web UI selects another preset before the first turn, `Sessions` restores this preset, or `WORKER_PRESET` for a worker.
 
 The `noWait` guard in `src/app/sessions.ts` refuses main-Session shell commands that invoke `sleep` at a command position, shell `timeoutMs` above 30 seconds, and `job_output` waits above 5 seconds. Reports and job results arrive automatically, so waiting only delays incoming candidates.
 

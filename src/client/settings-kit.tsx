@@ -47,7 +47,7 @@ export function useBlockDraft<V>(block: string, saved: V, revision: number, toVa
   const { t, call, notify } = usePanel()
   const { state } = usePanelData()
   const { reload } = useSettings()
-  return useDraft({ key: `dsh-superagent/draft/${state?.masterId ?? ''}/${block}`, saved, revision, reload, save: async (value, from) => {
+  return useDraft({ key: `dsh-superagent/draft/${state?.mainSessionId ?? ''}/${block}`, saved, revision, reload, save: async (value, from) => {
     const result = await call('PUT settings/:block', { block, body: { value: toValue(value), revision: from } })
     notify(t(result.restarting ? 'savedRestarting' : 'saved'))
     return result
@@ -123,7 +123,7 @@ type RouteRow = SettingsView['routes'][number]
  * A row shows the route's live cooldown state, so a failed provider is visible where its chain is edited.
  */
 export function ModelChainField({ id, role, value, primary, onChange }: {
-  id: string; role: 'router' | 'worker'; value: ChainRoute[]; primary: RoleModel; onChange: (next: ChainRoute[]) => void
+  id: string; role: 'main' | 'worker'; value: ChainRoute[]; primary: RoleModel; onChange: (next: ChainRoute[]) => void
 }) {
   const { t, call } = usePanel()
   const { settings } = useSettings()

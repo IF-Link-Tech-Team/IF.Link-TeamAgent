@@ -69,7 +69,7 @@ export interface ExecutorHost {
   /** Session manager for worker sessions and for relaying worker reports to the main Session. */
   readonly sessions: Pick<Sessions, 'ensure' | 'prompt' | 'promptedId' | 'relay' | 'holds'>
   /** The main Session's id: a model failure there has no Ticket, and continues through the router's fallback route. */
-  readonly masterId: string
+  readonly mainSessionId: string
   /** The model router, read for when a Session last switched route. */
   readonly router: Pick<ModelRouter, 'lastSwitchAt' | 'hasRoute'>
   /** A dispatcher may own the slots and the effect handlers, and share them with another runtime. */
@@ -504,7 +504,7 @@ export class DshExecutor implements Executor {
     }))
     this.disposers.push(ctx.on('agent/error', ({ agent, error }) => {
       // The main Session has no Ticket: a model failure there is answered by resuming it on the route the router switched to.
-      if (agent.id === this.host.masterId) { this.masterFailed(agent.id, error); return }
+      if (agent.id === this.host.mainSessionId) { this.masterFailed(agent.id, error); return }
       const ticket = this.ticketOf(agent)
       const assignment = ticket && runningAssignment(ticket)
       if (!ticket || !assignment || !liveTicket(ticket) || this.host.closing()) return
@@ -517,13 +517,13 @@ export class DshExecutor implements Executor {
    * never entered history, so telling it to continue keeps the pending Eval inside its deadline instead of waiting it out.
    */
   private masterFailed(sessionId: string, error: unknown): void {
-    if (this.host.closing() || !isFailoverError(error) || !this.host.router.hasRoute('router')) return
+    if (this.host.closing() || !isFailoverError(error) || !this.host.router.hasRoute('main')) return
     const switched = this.host.router.lastSwitchAt(sessionId)
     if (switched === undefined || switched <= (this.masterNoted.get(sessionId) ?? 0)) return
     this.masterNoted.set(sessionId, switched)
     const text = `Your last turn failed for a passing reason (${String(error).slice(0, 200)}). A backup model serves this Session now; `
       + 'continue what you were doing where it stopped.'
-    void this.background(this.host.sessions.prompt(this.host.masterId, `fallback:${switched}`, text, 'queue'))
+    void this.background(this.host.sessions.prompt(this.host.mainSessionId, `fallback:${switched}`, text, 'queue'))
   }
   /** Unsubscribes from host agent events and clears any pending transient-retry timers. */
   dispose(): void {

@@ -25,7 +25,7 @@ import { AcpExecutor } from '../executor/acp.ts'
 import { DispatchExecutor } from '../executor/dispatch.ts'
 import { WorkerMcpServer } from './mcp-server.ts'
 import { ticketCard } from './cards.ts'
-import { MasterAssessor } from './assessment.ts'
+import { MainAssessor } from './assessment.ts'
 import { KV } from '../kv.ts'
 import { Store } from './store.ts'
 import { evalsHealth } from './views/overview.ts'
@@ -58,7 +58,7 @@ declare module '@deepseek-ai/cordis' { interface Context { orchestrator: SourceH
 const now = (): string => new Date().toISOString()
 
 /**
- * Composition root of dsh-superagent that connects `Store`, `Setup`, `Engine`, `SourceRegistry`, `Effects`, `Outbox`, `Passes`, `Sessions`, `Settings`, `Prompts`, `DshExecutor`, and `MasterAssessor`.
+ * Composition root of dsh-superagent that connects `Store`, `Setup`, `Engine`, `SourceRegistry`, `Effects`, `Outbox`, `Passes`, `Sessions`, `Settings`, `Prompts`, `DshExecutor`, and `MainAssessor`.
  * Exposes the `SourceHost` service on the Cordis context for source plugins and coordinates startup, setup checks, HTTP route registration, and graceful shutdown.
  * Locks the state directory before opening SQLite so concurrent processes cannot corrupt or double-migrate state.
  */
@@ -74,14 +74,14 @@ export class Runtime extends Service implements SourceHost {
   readonly router: ModelRouter
   readonly executor: DispatchExecutor
   readonly mcp: WorkerMcpServer
-  readonly assessor: MasterAssessor
+  readonly assessor: MainAssessor
   readonly outbox: Outbox
   readonly engine: Engine
   readonly passes: Passes
   readonly ready: Promise<void>
   private readonly board = new HealthBoard()
   private readonly runtimeHealth = this.board.claim('runtime', { state: 'starting', detail: '' })
-  readonly masterId: string
+  readonly mainSessionId: string
   private readonly sourceLinks = new TextCache(200_000)
   private readonly stopped = new AbortController()
   private readonly disposers: (() => void)[] = []
@@ -111,8 +111,9 @@ export class Runtime extends Service implements SourceHost {
         ? environmentOf({ deployment: setup.deployment, sources: this.sources, settings: store.settings() }) : undefined
       const feishu = () => setup.configured() && !!setup.deployment.feishu
       const prompts = this.prompts = new Prompts(store, () => machine.promptMaxChars.get(), deployed, feishu)
-      const masterId = this.masterId = store.get(KV.runtime.masterId) ?? `orchestrator-${key(machine.stateDir)}`
-      store.set(KV.runtime.masterId, masterId)
+      const mainSessionId = this.mainSessionId = store.get(KV.runtime.mainSessionId) ?? store.get(KV.legacy.mainSessionId)
+        ?? `orchestrator-${key(machine.stateDir)}`
+      store.set(KV.runtime.mainSessionId, mainSessionId)
       const commands = this.commands = new Commands(() => setup.deployment, setup.commandEnvironment, this.lifetime)
       const board = this.board
       const effects = this.effects = new Effects(store, board)
@@ -125,14 +126,14 @@ export class Runtime extends Service implements SourceHost {
       const links: LinkHost = { store, links: this.sourceLinks, commands, sources, lifetime: this.lifetime }
       const link = (trigger: Trigger, signal?: AbortSignal) => sourceLink(links, trigger, signal)
       const environment = (ticket: Ticket) => this.ticketEnvironment(ticket)
-      const resources: ResourceHost = { store, pages: new TextCache(4_000_000), prompts, commands, masterId, context: ctx,
+      const resources: ResourceHost = { store, pages: new TextCache(4_000_000), prompts, commands, mainSessionId, context: ctx,
         memoryDir: machine.memoryDir,
         promptVersion: id => this.sessions.promptVersion(id), mayRead: (id, revision) => this.sessions.mayRead(id, revision),
         feishuPageSize: () => feishuSettings(sources).readPageSize, sourceLink: link }
-      const sessions = this.sessions = new Sessions({ context: ctx, store, prompts, effects, health: board.claim('models'), masterId,
+      const sessions = this.sessions = new Sessions({ context: ctx, store, prompts, effects, health: board.claim('models'), mainSessionId,
         lifetime: this.lifetime,
         closing: () => this.closing(), environment,
-        routeFor: role => this.router.preferred(role === 'orchestrator' ? 'router' : 'worker'),
+        routeFor: role => this.router.preferred(role === 'orchestrator' ? 'main' : 'worker'),
         tools: (agent, ticket) => ticket ? executorTools(this.toolHost, ticket) : mainTools(this.toolHost, agent) })
       const policyChanged: EngineForSettings['policyChanged'] = (from, to, effects) => { this.engine.policyChanged(from, to, effects) }
       this.settings = new Settings({ store, sources, engine: { policyChanged }, health: board, context: ctx, lifetime: this.lifetime, sessions,
@@ -143,16 +144,16 @@ export class Runtime extends Service implements SourceHost {
           return ticket ? executorTools(this.toolHost, ticket) : []
         } })
       const dsh = new DshExecutor({ context: ctx, get engine() { return runtime.engine }, store, effects, health: board.claim('worker'), machine,
-        lifetime: this.lifetime, sessions, masterId, get router() { return runtime.router }, registerEffects: false,
+        lifetime: this.lifetime, sessions, mainSessionId, get router() { return runtime.router }, registerEffects: false,
         closing: () => this.closing(), paused: () => this.paused(), environment, sourceLink: link,
         repliedTo: trigger => repliedTo({ store, sources }, trigger) })
       const acp = new AcpExecutor({ context: ctx, get engine() { return runtime.engine }, store, effects, machine, lifetime: this.lifetime,
         slots: dsh.workerSlots, prompts, mcp, health: board.claim('worker:acp', { state: 'paused', detail: 'No external runtime launched yet' }),
         environment, closing: () => this.closing(), paused: () => this.paused(), relay: (id, text) => sessions.relay(id, text) })
       this.executor = new DispatchExecutor({ store, effects, dsh, acp, paused: () => this.paused() })
-      this.assessor = new MasterAssessor({ get engine() { return runtime.engine }, commands, get deployment() { return setup.deployment }, effects,
+      this.assessor = new MainAssessor({ get engine() { return runtime.engine }, commands, get deployment() { return setup.deployment }, effects,
         settings: () => store.settings(), paused: () => this.paused(), threadContext: trigger => sources.threadContext(trigger),
-        deliver: (id, text) => sessions.prompt(masterId, id, text, 'steer'), candidateCard: candidate => candidateCard(links, candidate) })
+        deliver: (id, text) => sessions.prompt(mainSessionId, id, text, 'steer'), candidateCard: candidate => candidateCard(links, candidate) })
       // The pick reads the message and the work around it. Its account and model come from the Marks settings on every
       // pick, falling back to the environment; without either it stays quiet and a Channel draws its own mark.
       const marksHealth = board.claim('marks', { state: 'ready', detail: 'No mark picked yet' })
@@ -211,7 +212,7 @@ export class Runtime extends Service implements SourceHost {
       // Update the `evals` health entry on every pass if an evaluation failed as unavailable within the last hour.
       const evals = board.claim('evals', { state: 'ready', detail: 'No unavailable Eval in the last hour' })
       // After the engine: routing only needs the settings, the health board, the main Session id, and the DSH LLM service.
-      this.router = new ModelRouter({ context: ctx, store, masterId, health: board.claim('model-fallback') })
+      this.router = new ModelRouter({ context: ctx, store, mainSessionId, health: board.claim('model-fallback') })
       const evaluateDue = () => { engine.evaluateDue(); evals.set(evalsHealth(store)) }
       const passes = this.passes = new Passes({ engine: { receive: trigger => engine.receive(trigger), evaluateDue }, effects,
         health: this.runtimeHealth, lifetime: this.lifetime, configured: () => setup.configured(), closing: () => this.closing() })
@@ -270,7 +271,7 @@ export class Runtime extends Service implements SourceHost {
     this.router.install()
     this.mcp.install()
     this.executor.install()
-    await this.sessions.ensure(this.masterId, this.machine.stateDir, 'dsh-superagent orchestrator', 'orchestrator')
+    await this.sessions.ensure(this.mainSessionId, this.machine.stateDir, 'dsh-superagent orchestrator', 'orchestrator')
     for (const id of this.settings.syncable()) await this.settings.sync(id).catch(() => { /* sync() records its failure in health. */ })
     // If stop() was called while awaiting setup, session creation, or policy sync, do not start background loops.
     if (this.closing()) return
@@ -281,8 +282,8 @@ export class Runtime extends Service implements SourceHost {
   }
   private httpHost(): HttpHost {
     const runtime = this
-    const { store, sources, prompts, sessions, settings, engine, executor, health, machine, masterId, ready, sourceLinks, setup, passes } = this
-    return { store, sources, prompts, sessions, settings, engine, executor, health, machine, masterId, ready, sourceLinks,
+    const { store, sources, prompts, sessions, settings, engine, executor, health, machine, mainSessionId, ready, sourceLinks, setup, passes } = this
+    return { store, sources, prompts, sessions, settings, engine, executor, health, machine, mainSessionId, ready, sourceLinks,
       get deployment() { return setup.deployment },
       get setupProblem() { return setup.problem }, get feishuProblem() { return setup.feishuProblem },
       configured: () => setup.configured(), links: () => runtime.links(), ticketEnvironment: ticket => runtime.ticketEnvironment(ticket),
@@ -295,7 +296,7 @@ export class Runtime extends Service implements SourceHost {
     this.closingFlag = true; const passes = this.passes.stop(); this.stopped.abort()
     try {
       this.assessor.stop()
-      const ids = [this.masterId, ...this.store.tickets.list().map(ticket => workerSessionId(ticket.id))]
+      const ids = [this.mainSessionId, ...this.store.tickets.list().map(ticket => workerSessionId(ticket.id))]
       const agents = ids.map(id => this.ctx.agents.get(id as SessionId)).filter((agent): agent is Agent => agent !== undefined)
       for (const agent of agents) agent.cancel({ kind: 'user' }, { keepInbox: true })
       await Promise.allSettled([passes, this.effects.drain(), ...agents.map(agent => agent.whenIdle())])

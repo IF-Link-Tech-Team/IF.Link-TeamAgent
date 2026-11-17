@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { join } from 'node:path'
 import { expect, it } from 'vitest'
-import { ROUTER_PRESET, WORKER_PRESET } from '../src/app/sessions.ts'
+import { MAIN_PRESET, WORKER_PRESET } from '../src/app/sessions.ts'
 
 interface Row { id?: string; name: string; disabled?: unknown; config?: Record<string, unknown> & { plugins?: Row[] } | Row[] }
 /** The patch as DSH reads it: Cordis's include plugin parses `!!js` scalars, and applies the inserts to an entry list. */
@@ -53,7 +53,7 @@ it('defines the worker preset Executor Sessions run under, with a shell that mov
 
 it('defines the router preset the main Session runs under: the worker\'s 5-second shell and job waits, and only the tools it uses', async () => {
   const rows = await patched()
-  const router = presetOf(rows, ROUTER_PRESET), worker = presetOf(rows, WORKER_PRESET)
+  const router = presetOf(rows, MAIN_PRESET), worker = presetOf(rows, WORKER_PRESET)
   expect(router.order).toBe(91)
   const plugins = flat(router.plugins)
   const named = (preset: Row[], name: string) => preset.filter(row => row.name === name).map(row => row.config)

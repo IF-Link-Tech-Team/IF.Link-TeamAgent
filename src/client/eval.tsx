@@ -232,7 +232,7 @@ function EvalBlock() {
       </Field>
       <Section title={t('assessorModel')} hint={t('assessorModelHint')}>
         <ModelField id="dt-eval-model" value={value.model} onChange={model => edit({ model })} />
-        <ModelChainField id="dt-eval-chain" role="router" primary={value.model} value={value.fallbacks}
+        <ModelChainField id="dt-eval-chain" role="main" primary={value.model} value={value.fallbacks}
           onChange={fallbacks => edit({ fallbacks })} />
       </Section>
     </Fields>

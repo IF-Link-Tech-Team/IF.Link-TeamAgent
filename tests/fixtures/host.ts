@@ -261,7 +261,7 @@ export async function startRuntime(seed?: (store: Store) => void) {
   /** Parsed JSON payloads delivered to `sessionId`. */
   const relays = (sessionId: string) => deliveries.mock.calls.map(([call]) => call).filter(call => call.sessionId === sessionId)
     .map(call => JSON.parse(call.text) as Record<string, unknown>)
-  const candidates = () => relays(runtime.masterId).filter(item => item.kind === 'candidate').map(item => item.trigger_id)
+  const candidates = () => relays(runtime.mainSessionId).filter(item => item.kind === 'candidate').map(item => item.trigger_id)
   const runTool = async (sessionId: string, name: string, args: unknown) => {
     const tool = tools.get(sessionId)?.get(name)
     if (!tool) throw new Error(`Tool ${name} is not registered for ${sessionId}`)
@@ -269,7 +269,7 @@ export async function startRuntime(seed?: (store: Store) => void) {
   }
   /** Route one decision with the main Session's orchestrator_route, answering its result; a refused one throws its reason. */
   async function route(item: Record<string, unknown>): Promise<Record<string, unknown>> {
-    const { results } = await runTool(runtime.masterId, 'orchestrator_route', { decisions: [item] }) as { results: Record<string, unknown>[] }
+    const { results } = await runTool(runtime.mainSessionId, 'orchestrator_route', { decisions: [item] }) as { results: Record<string, unknown>[] }
     if (results[0]!.refused) throw new Error(String(results[0]!.refused))
     return results[0]!
   }

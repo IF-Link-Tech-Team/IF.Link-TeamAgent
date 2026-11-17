@@ -9,7 +9,7 @@ afterEach(async () => { await h?.stop(); h = undefined })
 const THREAD = `feishu:${CHAT}:om_1`
 const followup = (id: string, text: string, overrides: Record<string, unknown> = {}) => feishu(id, text, { mentions: [], root_id: 'om_1',
   ...overrides })
-const notices = (host: Host) => host.relays(host.runtime.masterId).filter(item => item.kind === 'follow_up')
+const notices = (host: Host) => host.relays(host.runtime.mainSessionId).filter(item => item.kind === 'follow_up')
 
 it('delivers a follow-up to the worker and tells the main Session with a card, without an Eval', async () => {
   h = await startRuntime()
@@ -54,7 +54,7 @@ it('leaves a delivered follow-up to its ticket\'s worker: the main Session may s
     h!.runtime.receive(message); await h!.runtime.idle()
     return message.id
   }
-  const master = (name: string, args: Record<string, unknown>) => h!.runTool(h!.runtime.masterId, name, args)
+  const master = (name: string, args: Record<string, unknown>) => h!.runTool(h!.runtime.mainSessionId, name, args)
   const decides = /its worker decides whether it belongs there/
   // A guest's follow-up stays inferred, so its stop does not stop the work; the main Session cannot route or requeue it.
   const guest = await settle('4', '别做了', 'ou_guest')
@@ -93,7 +93,7 @@ it('leaves a delivered follow-up to its ticket\'s worker: the main Session may s
  * whereas all steers arriving while running batch into the next step.
  */
 function modelCalls(host: Host) {
-  const master = host.agents.get(host.runtime.masterId)!
+  const master = host.agents.get(host.runtime.mainSessionId)!
   const seen: string[] = []
   const steer = master.steer.getMockImplementation() as (message: unknown) => void
   master.steer.mockImplementation((message: unknown) => { seen.push(master.status); steer(message) })
@@ -104,7 +104,7 @@ it('costs the main Session one model call for a burst of follow-ups while it wor
   for (const busy of [true, false]) {
     h = await startRuntime()
     await h.acceptedTicket(feishu('1', '@bot 修一下回归'))
-    const master = h.agents.get(h.runtime.masterId)!
+    const master = h.agents.get(h.runtime.mainSessionId)!
     master.status = busy ? 'running' : 'idle'
     h.deliveries.mockClear()
     const calls = modelCalls(h)
@@ -119,7 +119,7 @@ it('keeps a follow-up\'s notice in the effect queue until the main Session takes
   h = await startRuntime()
   await h.acceptedTicket(feishu('1', '@bot 修一下回归'))
   h.deliveries.mockClear()
-  h.agents.get(h.runtime.masterId)!.steer.mockImplementationOnce(() => { throw new Error('session gone') })
+  h.agents.get(h.runtime.mainSessionId)!.steer.mockImplementationOnce(() => { throw new Error('session gone') })
   const message = followup('2', '补充一点')
   h.runtime.receive(message)
   await h.runtime.idle()
@@ -142,9 +142,9 @@ it('relays a message a worker handed back as a candidate with the worker\'s reas
     .toEqual({ trigger_id: message.id, queued: true })
   await h.runtime.pump(); await h.runtime.idle()
   // The candidate tells the main Session; no requeue notice comes before it.
-  const injected = h.agents.get(h.runtime.masterId)!.inject.mock.calls.map(([notice]) => JSON.stringify(notice))
+  const injected = h.agents.get(h.runtime.mainSessionId)!.inject.mock.calls.map(([notice]) => JSON.stringify(notice))
   expect(injected.filter(notice => notice.includes('trigger_requeued'))).toEqual([])
-  expect(h.relays(h.runtime.masterId).find(item => item.kind === 'candidate'
+  expect(h.relays(h.runtime.mainSessionId).find(item => item.kind === 'candidate'
     && item.trigger_id === message.id)).toMatchObject({ strength: 'explicit',
     handed_back: [{ trigger_id: message.id, ticket_id: ticket.id, reason: 'It asks for an export button.' }] })
   await expect(h.runTool(sessionId, 'orchestrator_trigger_handback', { trigger_id: message.id,
@@ -157,7 +157,7 @@ it('relays a message a worker handed back as a candidate with the worker\'s reas
 it('lets a worker follow a related thread for context, which the main Session hears of without waking, and notes a ticket', async () => {
   h = await startRuntime()
   const { ticket, sessionId } = await h.acceptedTicket(feishu('1', '@bot 修一下回归'))
-  const master = h.agents.get(h.runtime.masterId)!
+  const master = h.agents.get(h.runtime.mainSessionId)!
   master.inject.mockClear(); h.deliveries.mockClear()
   expect(await h.runTool(sessionId, 'orchestrator_thread_follow', { thread: 'github:7',
     reason: 'The issue it fixes.' })).toEqual({ followed: true, thread: 'github:7' })
@@ -167,9 +167,9 @@ it('lets a worker follow a related thread for context, which the main Session he
   const injected = master.inject.mock.calls.map(([message]) => JSON.parse(text(message)) as Record<string, unknown>)
   expect(injected).toEqual([expect.objectContaining({ thread_followed: { ticket_id: ticket.id, thread: 'github:7',
     reason: 'The issue it fixes.' } })])
-  expect(h.relays(h.runtime.masterId)).toEqual([])
+  expect(h.relays(h.runtime.mainSessionId)).toEqual([])
   await expect(h.runTool(sessionId, 'orchestrator_thread_follow', { thread: 'github', reason: 'x' })).rejects.toThrow(/<source>:<id>/)
-  expect(await h.runTool(h.runtime.masterId, 'orchestrator_ticket_note', { ticket_id: ticket.id, text: 'Ticket B renamed the setting.' }))
+  expect(await h.runTool(h.runtime.mainSessionId, 'orchestrator_ticket_note', { ticket_id: ticket.id, text: 'Ticket B renamed the setting.' }))
     .toMatchObject({ reason: 'Noted for the worker' })
   await h.runtime.idle()
   expect(h.deliveries.mock.calls.map(([call]) => call).filter(call => call.sessionId === sessionId).map(call => call.text))
@@ -255,7 +255,7 @@ it('shows a candidate\'s message as its workers would read it, with the message 
   h.runtime.receive(reply); await h.runtime.idle()
   await h.runTool(sessionId, 'orchestrator_trigger_handback', { trigger_id: reply.id, reason: 'Another change.' })
   await h.runtime.pump(); await h.runtime.idle()
-  const card = h.relays(h.runtime.masterId).find(item => item.kind === 'candidate' && item.trigger_id === reply.id)!
+  const card = h.relays(h.runtime.mainSessionId).find(item => item.kind === 'candidate' && item.trigger_id === reply.id)!
   expect(card).toMatchObject({ from: 'ou_alice', text: long.slice(0, 600) + '…', chars: long.length, read: `trigger/${reply.id}`,
     replies_to: { trigger_id: ticket.origin.triggerId, preview: '@bot 修一下回归' } })
   expect(card).not.toHaveProperty('triggers')
@@ -286,7 +286,7 @@ it('leaves a follow-up to its ticket\'s worker after the main Session drops the 
   const { ticket } = await h.acceptedTicket(feishu('1', '@bot 修一下回归'))
   const request = followup('2', '@bot 另外把导出按钮也加上', { mentions: [{ id: 'ou_bot' }] })
   h.runtime.receive(request); await h.runtime.idle()
-  const master = (name: string, args: Record<string, unknown>) => h!.runTool(h!.runtime.masterId, name, args)
+  const master = (name: string, args: Record<string, unknown>) => h!.runTool(h!.runtime.mainSessionId, name, args)
   expect(await master('orchestrator_thread_unsubscribe', { thread: THREAD })).toEqual({ removed: true, thread: THREAD })
   // The worker has the message and still decides it, so the main Session cannot open a second ticket for it.
   await expect(h!.route({ kind: 'accept', trigger_id: request.id, title: '导出按钮', worktree_name: 'export',

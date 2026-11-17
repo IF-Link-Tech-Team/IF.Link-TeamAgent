@@ -52,7 +52,7 @@ type ReadCache = {
 interface EvalReads { cache: ReadCache; context?: AssessmentContext; error?: string; loading?: Promise<void> }
 /** Message returned when assessing a Trigger whose Source provides no thread context. */
 const NO_CONTEXT = 'This Source gives no Thread context; assess the Trigger\'s own text and the batch.'
-/** Host dependencies used by `MasterAssessor`. */
+/** Host dependencies used by `MainAssessor`. */
 export interface AssessorHost {
   /** Active evaluations in `Engine` that the assessor reads and decides. */
   readonly engine: Pick<EngineForMainSession, 'candidate' | 'candidateDelivered' | 'decide'>
@@ -85,7 +85,7 @@ export const EvalReadSchema = z.object({
   if (read.cursor !== undefined && read.resource !== 'thread') ctx.addIssue({ code: 'custom', message: 'cursor is only for thread. First page: {resource:"thread"}.' })
   if ((read.resource === 'image') !== (read.image_id !== undefined)) ctx.addIssue({ code: 'custom', message: 'Images require image_id from a returned read reference. Read the thread or root first to discover their images.' })
 })
-/** Validated arguments for `MasterAssessor.read`. */
+/** Validated arguments for `MainAssessor.read`. */
 export type EvalRead = z.infer<typeof EvalReadSchema>
 
 /**
@@ -93,7 +93,7 @@ export type EvalRead = z.infer<typeof EvalReadSchema>
  * Relays each evaluation's candidate card to the main Session through the durable `assessment` effect, serves bounded `TriggerContext` and repository reads while the evaluation runs, and converts the main Session's assessment into an `AssessmentOutcome` for `Engine.decide`.
  * Depends on `SourceRegistry` (via `AssessorHost`) for source-specific thread context and on `Sessions` for deduplicated candidate delivery; the main Session's `orchestrator_eval*` tools call `context`, `read`, and `decide`.
  */
-export class MasterAssessor implements Assessor {
+export class MainAssessor implements Assessor {
   /** Per-evaluation read caches and thread contexts, keyed by `evalId`. */
   private readonly evals = new Map<string, EvalReads>()
   private readonly controller = new AbortController()

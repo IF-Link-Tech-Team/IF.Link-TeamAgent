@@ -90,7 +90,7 @@ it('records nothing for a pause that changes nothing, refuses a sync while setup
   h = await startRuntime()
   const { settings, store } = h.runtime
   const revision = store.blockRevision('pause')
-  const inject = h.agents.get(h.runtime.masterId)!.inject
+  const inject = h.agents.get(h.runtime.mainSessionId)!.inject
   inject.mockClear()
   expect(await settings.pause(false, 'panel')).toEqual({ paused: false })
   await h.runtime.idle()
