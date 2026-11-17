@@ -74,7 +74,7 @@ function DroppedReplies({ items }: { items: DroppedReply[] }) {
   // Link to the message's Ticket, or fall back to its Thread for messages queued before receipts recorded `ticketId`.
   const target = (item: DroppedReply): { route: Route; name: string } | undefined => item.ticket
     ? { route: { page: 'execution', id: item.ticket.id }, name: item.ticket.title }
-    : item.thread ? { route: { page: 'trigger', id: item.thread }, name: t('term.thread') } : undefined
+    : item.thread ? { route: { page: 'thread', id: item.thread }, name: t('term.thread') } : undefined
   return <DisclosureRow icon={<Icon name="dismiss" />} title={<>{t('sourceDroppedTitle')} <span
     className="dt-count">{items.length}</span></>} open={open}
     onToggle={() => setOpen(!open)}>

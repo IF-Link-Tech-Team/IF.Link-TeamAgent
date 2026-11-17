@@ -14,9 +14,9 @@ import { HOME, TABS, initialLocation, lastSettingsGroup, remember, routeLabel, s
 import { SettingsPage } from './settings-page.tsx'
 import { SourceStatus } from './source.tsx'
 import { actorName, errorText, reasonLabel, valueLabel, type T, readableMarkers } from './text.ts'
-import { ThreadPage } from './thread.tsx'
+import { ThreadPage } from './thread-page.tsx'
 import { TicketPage } from './ticket.tsx'
-import { TriggerStatus } from './trigger.tsx'
+import { TriggerStatus } from './threads.tsx'
 import { When } from './widgets.tsx'
 
 export interface AppProps {
@@ -82,14 +82,14 @@ function SearchResults({ result, query, onClose }: { result: SearchView; query: 
         open={go({ page: 'execution', id: ticket.id })}>
         <span>{t('term.ticket')}</span><span>{ticket.stage === 'ended' ? t('ticket.ended') : ticketMark(t, ticket).label}</span>
       </Result>)}
-      {result.threads.map(thread => <Result key={thread.key} name={readableMarkers(t, thread.title)} open={go({ page: 'trigger',
+      {result.threads.map(thread => <Result key={thread.key} name={readableMarkers(t, thread.title)} open={go({ page: 'thread',
         id: thread.key })}>
         <span>{t('term.thread')}</span>
       </Result>)}
       {/* Filtered triggers have no Thread and display their filter reason instead of a link. */}
       {result.items.map(item => <Result key={item.id} name={<Highlight text={readableMarkers(t, item.preview) || t('empty')}
         query={query} />}
-        open={item.filtered === undefined ? go({ page: 'trigger', id: item.threads[0]!, query: { trigger: item.id } }) : undefined}>
+        open={item.filtered === undefined ? go({ page: 'thread', id: item.threads[0]!, query: { trigger: item.id } }) : undefined}>
         <span>{valueLabel(t, 'source', item.source)}</span><span>{actorName(t, item.actor)}</span><When at={item.at} />
         {item.threadTitle && <span className="dt-ellipsis">{t('inThread', { thread: readableMarkers(t, item.threadTitle) })}</span>}
         {item.filtered !== undefined && <span>{t('searchFiltered', { reason: reasonLabel(t, item.filtered) })}</span>}
@@ -148,7 +148,7 @@ function Pages({ route, openTab, deploymentForm }: { route: Route; openTab: (tab
     switch (route.page) {
       case 'overview': return <OverviewPage />
       case 'source': return <SourceStatus />
-      case 'trigger': return route.id !== undefined ? <ThreadPage key={route.id} id={route.id} target={route.query?.trigger} />
+      case 'thread': return route.id !== undefined ? <ThreadPage key={route.id} id={route.id} target={route.query?.trigger} />
         : <TriggerStatus filter={route.query?.filter ?? 'subscribed'} />
       case 'eval': return <EvalStatus filter={route.query?.filter ?? 'work'} window={route.query?.window}
         paused={!!state?.paused} />

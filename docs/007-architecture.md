@@ -404,8 +404,8 @@ Some generic modules still refer directly to GitHub or Feishu:
 | `src/client/api.ts` | Calls and polls of the management API, typed by `src/app/api.ts`, and the Decision filters of the Eval status |
 | `src/client/tabs.ts` | The tabs, the settings groups, the typed routes that `parseRoute` reads, and the route memory with the settings group opened last |
 | `src/client/overview.tsx` | The overview |
-| `src/client/source.tsx`, `trigger.tsx`, `eval.tsx`, `execution.tsx` | One file per stage: its status, and its settings where it has some |
-| `src/client/thread.tsx`, `ticket.tsx` | The record pages: a Thread with its timeline, and a Ticket with its authorization, Inputs and Assignments |
+| `src/client/source.tsx`, `threads.tsx`, `eval.tsx`, `execution.tsx` | One file per stage: its status, and its settings where it has some |
+| `src/client/thread-page.tsx`, `ticket.tsx` | The record pages: a Thread with its timeline, and a Ticket with its authorization, Inputs and Assignments |
 | `src/client/settings-page.tsx` | The Settings tab: the group navigation and the group on screen |
 | `src/client/routing.tsx` | `RuntimesBlock` and `DispatchBlock`: the panel editors for runtime profiles and the task-routing tables |
 | `src/client/settings-kit.tsx` | The building blocks of settings blocks: the settings the stage groups share, `useBlockDraft`, the fields, among them a Source kind's, and the history of saves |

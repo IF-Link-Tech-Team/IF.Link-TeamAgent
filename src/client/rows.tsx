@@ -57,7 +57,7 @@ export function ThreadLine({ thread, ticketId, context }: { thread: ThreadRow; t
     <div className="dt-ticket-stage"><StageMark state={dot} icon={icon} label={label} /></div>
     <div className="dt-ticket-body">
       <div className="dt-row-title">
-        <button type="button" className="dt-open" title={thread.pollError} onClick={() => navigate({ page: 'trigger',
+        <button type="button" className="dt-open" title={thread.pollError} onClick={() => navigate({ page: 'thread',
           id: thread.key })}>{readableMarkers(t, thread.title)}</button>
       </div>
       <div className="dt-row-quote dt-line">
@@ -82,7 +82,7 @@ export function DecisionLine({ decision }: { decision: DecisionRow }) {
   const preview = readableMarkers(t, decision.preview)
   const reason = decision.reason ? reasonLabel(t, decision.reason) : ''
   const open = () => decision.ticketId ? navigate({ page: 'execution', id: decision.ticketId })
-    : navigate({ page: 'trigger', id: decision.thread, query: { trigger: decision.triggerIds[0] ?? '' } })
+    : navigate({ page: 'thread', id: decision.thread, query: { trigger: decision.triggerIds[0] ?? '' } })
   return <li className="dt-row dt-link dt-ticket">
     <div className="dt-ticket-stage"><StageMark state={mark.dot} icon={mark.icon} label={mark.label} /></div>
     <div className="dt-ticket-body">

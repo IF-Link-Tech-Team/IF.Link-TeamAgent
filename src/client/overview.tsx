@@ -42,11 +42,11 @@ function ProblemLine({ problem, onChanged }: { problem: Problem; onChanged: () =
       return row(t('sourceError', { source: localized(t, problem.source.title) }), health.code ? worded(healthText(t, health))
         : raw(health.detail), { page: 'source' }, t('sourceErrorHint'))
     }
-    case 'eval-overdue': return row(t('problemEvalOverdue', { thread: readableMarkers(t, problem.thread.title) }), undefined, { page: 'trigger',
+    case 'eval-overdue': return row(t('problemEvalOverdue', { thread: readableMarkers(t, problem.thread.title) }), undefined, { page: 'thread',
       id: problem.thread.key })
     case 'eval-unavailable': return row(t('problemEvalUnavailable', { thread: readableMarkers(t, problem.thread.title) }), raw(reasonLabel(t,
       problem.reason)),
-      { page: 'trigger', id: problem.thread.key, query: { trigger: problem.triggerId } }, undefined, <>
+      { page: 'thread', id: problem.thread.key, query: { trigger: problem.triggerId } }, undefined, <>
         <Button variant="outline" size="sm" icon={<Icon name="refresh" size={14} />} disabled={post.busy}
           onClick={() => { void post.run(() => call('POST triggers/:id/requeue', { id: problem.triggerId })) }}>{t('requeue')}</Button>
         <Button variant="outline" size="sm" icon={<Icon name="dismiss" size={14} />} disabled={post.busy}
@@ -81,7 +81,7 @@ export function OverviewPage() {
       <ul className="dt-list dt-cards">{data.problems.map((problem, index) => <ProblemLine key={index} problem={problem}
         onChanged={reload} />)}</ul>
     </Section>}
-    <Section title={t('lastDay')} action={more({ page: 'trigger', query: { filter: 'recent' } })}>
+    <Section title={t('lastDay')} action={more({ page: 'thread', query: { filter: 'recent' } })}>
       {/* Received and evaluated counts operate on Triggers rather than Threads or Decisions, so they do not link to filtered views. */}
       <div className="dt-stats">
         {stat(t('flowReceivedLabel'), data.flow.received)}

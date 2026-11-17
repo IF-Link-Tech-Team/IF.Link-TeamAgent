@@ -149,7 +149,7 @@ export function ThreadPage({ id, target }: { id: string; target?: string }) {
     </DisclosureRow>}
     {data.correlated.length > 0 && <Section title={t('term.correlation')}>
       <ul className="dt-plain-list">{data.correlated.map(item => <li key={item.key}>
-        <button type="button" className="dt-textlink" onClick={() => navigate({ page: 'trigger', id: item.key })}>{readableMarkers(t,
+        <button type="button" className="dt-textlink" onClick={() => navigate({ page: 'thread', id: item.key })}>{readableMarkers(t,
           item.title)}</button>
       </li>)}</ul>
     </Section>}

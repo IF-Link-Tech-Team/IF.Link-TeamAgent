@@ -55,14 +55,14 @@ it('shows a Ticket with its stage, its Mandate details with the Trigger and Deci
   await click(all('.dt-open').find(button => button.textContent === '修复回归')!)
   expect(document.querySelector('.dt-page-title h2')?.textContent).toBe('修复回归')
   // Progress is in the Channels and the Session, so the page has no report section.
-  expect(all('.dt-section-title').map(title => title.querySelector('.dt-section-name')?.textContent)).toEqual(['授权详情', '未送达的输入', '订阅的线程'])
+  expect(all('.dt-section-title').map(title => title.querySelector('.dt-section-name')?.textContent)).toEqual(['授权详情', '未送达的输入', '订阅的话题'])
   expect(document.querySelector('.dt-status-line .dt-stage')?.textContent).toBe(zh.executingLabel)
   expect(document.querySelector('.dt-status-line .dt-stage .dt-spinner')).not.toBeNull()
   // A Thread this Ticket follows reads as subscribed on its page, though no other Ticket follows it.
   expect(all('.dt-list .dt-ticket .dt-stage').map(stage => stage.textContent)).toContain(zh.threadSubscribed)
   expect(all('.dt-list .dt-ticket .dt-stage').map(stage => stage.textContent)).not.toContain(zh.threadUnsubscribed)
   expect(all('.dt-status-line .dt-lv').map(item => item.textContent)).toEqual(['授权 明确', '发起 飞书 · Alice', expect.stringMatching(/^更新 /)])
-  for (const expected of ['修复登录页回归', '点名方式@ 智能体', '名单里的人明确请求，由主 Session 接单', '未送达：等待派工运行',
+  for (const expected of ['修复登录页回归', '点名方式@ 智能体', '名单里的人明确请求，由主 Session 接单', '未送达：等待执行分配运行',
     'Alice：顺便改标题']) expect(text()).toContain(expected)
   expect(all('.dt-chip').map(chip => chip.textContent)).toContain('飞书团队群')
   await click(zh['term.channel'])
@@ -72,7 +72,7 @@ it('shows a Ticket with its stage, its Mandate details with the Trigger and Deci
   expect(all('.dt-disclosure-body .dt-table tr').map(row => row.textContent)).toEqual(['DSH_SUPERAGENT_DIR/w/t1',
     'DSH_SUPERAGENT_GITHUB_NUMBER—'])
   await click(document.querySelector<HTMLElement>('.dt-trigger-link')!)
-  expect(tab(zh['tab.trigger']).getAttribute('aria-selected')).toBe('true')
+  expect(tab(zh['tab.thread']).getAttribute('aria-selected')).toBe('true')
 })
 
 it('reports a missing Ticket instead of rendering an empty page', async () => {
@@ -166,7 +166,7 @@ it('tells a Ticket or Thread that does not exist from a dsh-superagent that is n
   await remount()
   expect(text()).not.toContain(zh.ticketNotFound)
   expect(text()).toContain(zh.hostNotRunning)
-  at({ page: 'trigger', id: 'feishu:oc_1:om_root' })
+  at({ page: 'thread', id: 'feishu:oc_1:om_root' })
   await remount()
   expect(text()).not.toContain(zh.threadNotFound)
   expect(text()).toContain(zh.hostNotRunning)

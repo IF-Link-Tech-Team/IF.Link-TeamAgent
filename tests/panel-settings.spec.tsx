@@ -106,7 +106,7 @@ it('shows save and discard only while a settings block has edits, at the end of 
   await type(field<HTMLInputElement>('智能体的 GitHub CLI'), 'gh-other')
   expect(github.lastElementChild!.classList.contains('dt-savebar')).toBe(true)
   // The agent CLI is read by setup, so the bar warns that saving restarts dsh-superagent and interrupts running work.
-  expect(github.lastElementChild!.textContent).toContain('2 个进行中的派工会中断')
+  expect(github.lastElementChild!.textContent).toContain('2 个进行中的执行分配会中断')
 })
 
 it('gives the focus back to the field that had it once a block\'s save ends', async () => {
@@ -137,11 +137,11 @@ it('lists the settings groups stages first, opens each stage\'s group from its s
     expect(document.querySelector('.dt-settings-link[aria-current="page"]')?.textContent).toBe(group)
   }
   // The Trigger stage has no settings, so its status offers none.
-  await click(tab(zh['tab.trigger']))
+  await click(tab(zh['tab.thread']))
   expect(all('.dt-status-head button').map(button => button.textContent)).not.toContain(zh['tab.settings'])
   await click(tab(zh['tab.settings']))
   expect(document.querySelector('.dt-settings-link[aria-current="page"]')?.textContent).toBe(zh['promptPart.runtime/work'])
-  await click(tab(zh['tab.trigger']))
+  await click(tab(zh['tab.thread']))
   await remount()
   await click(tab(zh['tab.settings']))
   expect(document.querySelector('.dt-settings-link[aria-current="page"]')?.textContent).toBe(zh['promptPart.runtime/work'])

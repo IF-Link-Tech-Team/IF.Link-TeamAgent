@@ -23,7 +23,7 @@ it('opens a search result older than the newest page around its Trigger', async 
   await mount()
   await type(field<HTMLInputElement>(zh.searchLabel), 'message')
   await act(async () => { field<HTMLInputElement>(zh.searchLabel).closest('form')!.requestSubmit() }); await settle()
-  expect(text()).toContain('找到 0 个工单、0 个线程、1 条触发')
+  expect(text()).toContain('找到 0 个工单、0 个话题、1 条触发')
   await click(all('.dt-search-results button').find(button => button.textContent === 'message e1')!)
   expect(server.requests.some(request => request.path.includes('around=e1'))).toBe(true)
   expect(document.querySelector('.dt-highlight')?.textContent).toContain('message e1')
@@ -45,14 +45,14 @@ it('returns to the exact page after a remount of the main panel', async () => {
 
 it('shows domain terms in the interface language only and lists both languages in the (?) glossary', async () => {
   await mount(en)
-  expect(all('[role="tab"]').map(tab => tab.textContent)).toEqual(['Overview', 'Source', 'Trigger', 'Eval', 'Execution', 'Settings'])
+  expect(all('[role="tab"]').map(tab => tab.textContent)).toEqual(['Overview', 'Source', 'Thread', 'Eval', 'Execution', 'Settings'])
   await click('Glossary')
   const dialog = document.querySelector('[role="dialog"]')!
   const row = [...dialog.querySelectorAll('tr')].find(item => item.textContent?.startsWith('Ticket'))!
   expect([...row.querySelectorAll('td')].map(cell => cell.textContent)).toEqual(['Ticket', '工单', 'An authorized unit of work'])
   expect(dialog.textContent).toContain('Accept 接单')
   // Terms are grouped the way the tabs follow the flow, after the roles that act in it.
-  expect([...dialog.querySelectorAll('th.dt-glossary-group')].map(cell => cell.textContent)).toEqual(['Roles', 'Source', 'Trigger', 'Eval',
+  expect([...dialog.querySelectorAll('th.dt-glossary-group')].map(cell => cell.textContent)).toEqual(['Roles', 'Source', 'Thread', 'Eval',
     'Execution'])
   expect([...dialog.querySelectorAll('tr')].find(item => item.textContent?.startsWith('Main Session'))!.textContent).toContain('prompts call it the orchestrator')
 })
