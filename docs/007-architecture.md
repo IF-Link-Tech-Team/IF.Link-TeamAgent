@@ -483,6 +483,7 @@ Some generic modules still refer directly to GitHub or Feishu:
 | `tests/views.spec.ts` | What the management views derive from the Store, such as the Thread a dropped message belongs to |
 | `tests/timeline.spec.ts` | A Thread's pages and a Trigger's neighbours by time and then id, with every received Trigger's time in one form |
 | `tests/migration.spec.ts` | The schema 11 migration: every stored record in its current shape, and the refusal of older schemas |
+| `tests/limits.spec.ts` | The single source of validation bounds: every numeric input bound in the panel comes from `LIMITS`, never a literal |
 | `tests/store.spec.ts` | Repositories and their working sets, in SQLite as in memory, the kv area, with every key of `KV` spelled only in `src/kv.ts` and the migration, settings history and queries |
 | `tests/search.spec.ts` | Full-text search over tickets, triggers and decisions: Chinese substrings through the trigram index, the kinds filter and the short-query fallback, replacing a record's text, the index rebuilt on an older database, and the main Session's tool with the read paths it returns |
 | `tests/prompts.spec.ts` | Prompt validation, assembly and versions |

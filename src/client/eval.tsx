@@ -180,12 +180,12 @@ function PolicyBlock() {
               title: t(`gesturesModeHint`) }))} />
         </Field>
         <Field label={t('gesturePersonMinutes')} hint={t('gesturePersonMinutesHint')}>
-          <Input type="number" min={1} max={1440} required value={String(policy.gestures.personMinutes)}
+          <Input type="number" min={LIMITS.gesturePersonMinutes.min} max={LIMITS.gesturePersonMinutes.max} required value={String(policy.gestures.personMinutes)}
             onChange={event => edit({ gestures: { ...policy.gestures,
               personMinutes: event.target.value === '' ? 0 : Number(event.target.value) } })} />
         </Field>
         <Field label={t('gesturePerHour')} hint={t('gesturePerHourHint')}>
-          <Input type="number" min={1} max={60} required value={String(policy.gestures.perHour)}
+          <Input type="number" min={LIMITS.gesturePerHour.min} max={LIMITS.gesturePerHour.max} required value={String(policy.gestures.perHour)}
             onChange={event => edit({ gestures: { ...policy.gestures,
               perHour: event.target.value === '' ? 0 : Number(event.target.value) } })} />
         </Field>
@@ -265,7 +265,7 @@ function MarksBlock() {
         <Input className="dt-mono" spellCheck={false} value={value.model} onChange={event => edit({ model: event.target.value })} />
       </Field>
       <Field label={t('marksTimeout')} hint={t('marksTimeoutHint')}>
-        <Input type="number" min={500} max={15000} required value={value.timeoutMs}
+        <Input type="number" min={LIMITS.marksTimeoutMs.min} max={LIMITS.marksTimeoutMs.max} required value={value.timeoutMs}
           onChange={event => edit({ timeoutMs: event.target.value })} />
       </Field>
     </Fields>

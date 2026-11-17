@@ -7,12 +7,13 @@
  * See `docs/iflink/heartbeat-scheduler.md` sections 5.1b, 5.5 and 5.8 for the reasoning behind each rule.
  */
 import { z } from 'zod'
+import { LIMITS } from '../limits.ts'
 
 /** The schedule shapes a job may use. Deliberately not full cron: three shapes cover every case we have, and a wrong field name fails at validation instead of silently never firing. */
 export const ScheduleSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('daily'), at: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).default('09:30') }).strict(),
   z.object({ kind: z.literal('weekly'), weekday: z.number().int().min(1).max(7), at: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/) }).strict(),
-  z.object({ kind: z.literal('every'), hours: z.number().int().min(1).max(168) }).strict(),
+  z.object({ kind: z.literal('every'), hours: z.number().int().min(LIMITS.scheduleEveryHours.min).max(LIMITS.scheduleEveryHours.max) }).strict(),
 ])
 export type Schedule = z.infer<typeof ScheduleSchema>
 

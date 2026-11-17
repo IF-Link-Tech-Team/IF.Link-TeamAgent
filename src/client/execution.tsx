@@ -88,11 +88,11 @@ function RoutingBlock() {
         <h2 className="dt-block-title">{t('modelRouting')}<InfoTip text={t('modelRoutingHint')} /></h2>
         <Hint>{t('routeFallbackNote')}</Hint>
         <Field label={t('routeCooldown')} hint={t('routeCooldownHint')}>
-          <Input type="number" min={10} max={3600} required value={value.cooldownSeconds}
+          <Input type="number" min={LIMITS.routingCooldownSeconds.min} max={LIMITS.routingCooldownSeconds.max} required value={value.cooldownSeconds}
             onChange={event => edit({ cooldownSeconds: event.target.value })} />
         </Field>
         <Field label={t('routeProbe')} hint={t('routeProbeHint')}>
-          <Input type="number" min={10} max={600} required value={value.probeSeconds}
+          <Input type="number" min={LIMITS.routingProbeSeconds.min} max={LIMITS.routingProbeSeconds.max} required value={value.probeSeconds}
             onChange={event => edit({ probeSeconds: event.target.value })} />
         </Field>
       </div>

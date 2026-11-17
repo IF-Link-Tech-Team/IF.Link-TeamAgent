@@ -45,8 +45,8 @@ export const PolicyConfigSchema = z.object({
   gestures: z.object({
     mode: z.enum(['off', 'observe', 'auto']).default('observe'),
     /** How long before the same person may be reacted to again, and how many reactions one chat gets in a rolling hour. */
-    personMinutes: z.number().int().min(1).max(1440).default(30),
-    perHour: z.number().int().min(1).max(60).default(2),
+    personMinutes: z.number().int().min(LIMITS.gesturePersonMinutes.min).max(LIMITS.gesturePersonMinutes.max).default(30),
+    perHour: z.number().int().min(LIMITS.gesturePerHour.min).max(LIMITS.gesturePerHour.max).default(2),
   }).strict().default({ mode: 'observe', personMinutes: 30, perHour: 2 }),
   sources: z.record(z.string().regex(/^[a-z][a-z0-9-]*$/), SourcePolicySchema).default({}),
 }).strict()
@@ -78,8 +78,8 @@ export const ExecutorConfigSchema = z.object({
 export const SourceInstanceSchema = z.object({ enabled: z.boolean().default(true), config: z.record(z.string(), z.unknown()).default({}) }).strict()
 /** How the model router paces itself: how long a failed route is skipped, and how often the main Session's route is probed. */
 export const RoutingConfigSchema = z.object({
-  cooldownSeconds: z.number().int().min(10).max(3600).default(300),
-  probeSeconds: z.number().int().min(10).max(600).default(60),
+  cooldownSeconds: z.number().int().min(LIMITS.routingCooldownSeconds.min).max(LIMITS.routingCooldownSeconds.max).default(300),
+  probeSeconds: z.number().int().min(LIMITS.routingProbeSeconds.min).max(LIMITS.routingProbeSeconds.max).default(60),
 }).strict()
 /**
  * One worker runtime's launch profile. Every value is editable from the panel; the host reads it when it launches a
@@ -108,8 +108,8 @@ export const RuntimeProfileSchema = z.object({
   /** The `exposure` field that file carries, when the harness has one; empty omits it. */
   mcpExposure: z.string().trim().default(''),
   concurrency: z.number().int().min(1).max(LIMITS.maxWorkers.max).default(1),
-  maxWallMinutes: z.number().int().min(1).max(1440).default(60),
-  maxTurns: z.number().int().min(1).max(1000).default(200),
+  maxWallMinutes: z.number().int().min(LIMITS.runtimeMaxWallMinutes.min).max(LIMITS.runtimeMaxWallMinutes.max).default(60),
+  maxTurns: z.number().int().min(LIMITS.runtimeMaxTurns.min).max(LIMITS.runtimeMaxTurns.max).default(200),
 }).strict()
 export type RuntimeProfile = z.infer<typeof RuntimeProfileSchema>
 const defaultRuntimes = (): Record<string, RuntimeProfile> => ({
@@ -203,7 +203,7 @@ export const DispatchConfigSchema = z.object({
   /** Capability tags (browser, vision, feishu, ssh, repo) mapped to the families that satisfy them. */
   capabilityFamilies: z.record(z.string(), z.array(z.string().trim().min(1))).default({}),
   rules: z.array(DispatchRuleSchema).default([]),
-  escalateAfter: z.number().int().min(0).max(10).default(2),
+  escalateAfter: z.number().int().min(LIMITS.dispatchEscalateAfter.min).max(LIMITS.dispatchEscalateAfter.max).default(2),
 }).strict()
 export type DispatchConfig = z.infer<typeof DispatchConfigSchema>
 /** The Cloudflare Workers AI account and model that pick an emoji, and whether a pick runs at all. */
@@ -213,7 +213,7 @@ export const MarksConfigSchema = z.object({
   /** Written by the panel; an API key, so it is masked in every read. An empty value falls back to the environment. */
   token: z.string().trim().default(''),
   model: z.string().trim().min(1).default('clef-flash'),
-  timeoutMs: z.number().int().min(500).max(15000).default(4000),
+  timeoutMs: z.number().int().min(LIMITS.marksTimeoutMs.min).max(LIMITS.marksTimeoutMs.max).default(4000),
 }).strict()
 /** What a read returns where a secret is stored; saving the same text keeps the stored secret. */
 export const SETTINGS_MASK = '••••••'

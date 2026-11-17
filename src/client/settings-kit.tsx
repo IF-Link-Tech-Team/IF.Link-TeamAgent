@@ -1,6 +1,7 @@
 /** Shared settings context, block draft hook, form controls, Source schema field renderer, and configuration history. */
 import { cloneElement, createContext, useContext, useEffect, useId, useLayoutEffect, useRef, useState, type ReactElement,
   type ReactNode } from 'react'
+import { LIMITS } from '../limits.ts'
 import type { ApiResponse } from '../app/api.ts'
 import type { FieldSpec, Localized } from '../sources/kind.ts'
 import { usePoll, type HistoryView, type Settings, type SettingsView, type SourceView } from './api.ts'
@@ -295,7 +296,7 @@ function ScheduleInput({ value, onChange }: { value: unknown; onChange: (next: S
       {(['daily', 'weekly', 'every'] as const).map(option => <option key={option} value={option}>{t(`scheduleKind.${option}`)}</option>)}
     </select>
     {schedule.kind === 'every'
-      ? <span className="dt-schedule-every"><Input type="number" min={1} max={168} required aria-label={t('scheduleHours')}
+      ? <span className="dt-schedule-every"><Input type="number" min={LIMITS.scheduleEveryHours.min} max={LIMITS.scheduleEveryHours.max} required aria-label={t('scheduleHours')}
         value={String(schedule.hours ?? '')} onChange={event => onChange({ ...schedule, hours: event.target.value === '' ? undefined
           : Number(event.target.value) })} /><span className="dt-hint">{t('scheduleHoursUnit')}</span></span>
       : <Input type="time" required aria-label={t('scheduleAt')} value={schedule.at ?? ''}

@@ -1,5 +1,6 @@
 /** Compact editors for worker runtimes and the task-routing table; every mapping is settings data, never code. */
 import { Fragment, useState } from 'react'
+import { LIMITS } from '../limits.ts'
 import type { DispatchConfig, DispatchFamily, DispatchType, RuntimeProfile } from '../policy/index.ts'
 import { usePanel } from './provider.tsx'
 import { Button, DisclosureRow, Icon, InfoTip, Input, Switch } from './controls.tsx'
@@ -65,11 +66,11 @@ export function RuntimesBlock() {
                   onChange={event => set(id, { envFile: event.target.value })} /></Field>
               </div>
               <div className="dt-grid3">
-                <Field label={t('runtimeConcurrency')}><Input type="number" min={1} max={16} value={profile.concurrency}
+                <Field label={t('runtimeConcurrency')}><Input type="number" min={LIMITS.maxWorkers.min} max={LIMITS.maxWorkers.max} value={profile.concurrency}
                   onChange={event => set(id, { concurrency: Number(event.target.value) })} /></Field>
-                <Field label={t('runtimeWallMinutes')}><Input type="number" min={1} max={1440} value={profile.maxWallMinutes}
+                <Field label={t('runtimeWallMinutes')}><Input type="number" min={LIMITS.runtimeMaxWallMinutes.min} max={LIMITS.runtimeMaxWallMinutes.max} value={profile.maxWallMinutes}
                   onChange={event => set(id, { maxWallMinutes: Number(event.target.value) })} /></Field>
-                <Field label={t('runtimeTurns')}><Input type="number" min={1} max={1000} value={profile.maxTurns}
+                <Field label={t('runtimeTurns')}><Input type="number" min={LIMITS.runtimeMaxTurns.min} max={LIMITS.runtimeMaxTurns.max} value={profile.maxTurns}
                   onChange={event => set(id, { maxTurns: Number(event.target.value) })} /></Field>
               </div>
               <div className="dt-grid3">
@@ -147,7 +148,7 @@ export function DispatchBlock() {
             onChange={event => edit({ fallbackFamily: event.target.value })}>
             {Object.keys(value.families).map(id => <option key={id} value={id}>{id}</option>)}
           </select></Field>
-          <Field label={t('dispatchEscalateAfter')}><Input type="number" min={0} max={10} value={value.escalateAfter}
+          <Field label={t('dispatchEscalateAfter')}><Input type="number" min={LIMITS.dispatchEscalateAfter.min} max={LIMITS.dispatchEscalateAfter.max} value={value.escalateAfter}
             onChange={event => edit({ escalateAfter: Number(event.target.value) })} /></Field>
         </div>
         <Hint>{t('dispatchIntro')}</Hint>
