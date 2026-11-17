@@ -1,9 +1,9 @@
 /** Tickets: their lifecycle from an accept to their end, their Subscriptions and their Inputs. */
 import { key } from './ids.ts'
 import { UserError } from './errors.ts'
-import { latestAssignment, latestReport, isOpen, readUntil, runningAssignment, settled, threadKey, blockedOnPerson } from './model.ts'
+import { latestAssignment, latestReport, isOpen, readUntil, runningAssignment, settled, threadKey, blockedOnPerson } from './domain.ts'
 import type { Assignment, ChannelRef, Eval, Follow, Mandate, PolicyEffect, ThreadRef, Ticket, TicketEndBy, TicketInput, TicketOutcome,
-  Trigger, TriggerDisposition } from './model.ts'
+  Trigger, TriggerDisposition } from './domain.ts'
 import type { AssessmentOutcome } from './ports.ts'
 import { EnginePart, type EngineOptions } from './part.ts'
 import type { Replies } from './replies.ts'

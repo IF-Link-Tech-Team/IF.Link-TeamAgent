@@ -1,7 +1,7 @@
 # 表情回复（Emoji reactions）
 
 > 状态：**工作回执 + 模型挑表情已上线**；**社交反应（L1）已实现，`observe` 观察中**（2026-11-09）。
-> 代码：`src/core/replies.ts`、`src/app/marks.ts`、`src/sources/feishu-channel.ts`、`src/feishu-emojis.ts`。
+> 代码：`src/core/replies.ts`、`src/app/reaction-picker.ts`、`src/sources/feishu-channel.ts`、`src/feishu-emojis.ts`。
 
 ## 为什么做这件事
 
@@ -73,7 +73,7 @@ EOF
 ### L1 社交反应（已实现，`observe` 观察中）
 
 **已落地**：第五种 Decision `react`（带 `score` + `intent`）、`policy.gestures.mode`（off/observe/auto）、
-预算与冷却（`src/app/gestures.ts`：默认同一人 30 分钟、每群每小时 2 个，两个数都可在面板改）、MarkPicker 按 intent 收窄表情池、
+预算与冷却（`src/app/gestures.ts`：默认同一人 30 分钟、每群每小时 2 个，两个数都可在面板改）、ReactionPicker 按 intent 收窄表情池、
 `colleague-gesture` 规则已写入线上 Policy（`mode: observe`）。
 
 **面板（2026-11-15 补）**：Eval → 设置 →「社交反应」可以直接切 `关闭 / 仅观察 / 自动`，并改同一人冷却分钟数与每群每小时上限；改动保存后下一次研判就按新值算，不用改代码或走工具。下面还有「表情挑选」：开关、Cloudflare 账户、Workers AI 令牌（只写不读，读取只回掩码）、模型与超时都在面板里，令牌留空则回退到环境变量。**待做**：面板展示 `react` 与拒绝原因（现在只在决策列表里看得到流水）。
@@ -118,7 +118,7 @@ EOF
 ```
 Eval 研判（同一次调用）
   → Decision: react { score, intent }
-     → 预算/冷却通过 → Outbox 排 reaction(gesture) → MarkPicker 按 intent 挑表情
+     → 预算/冷却通过 → Outbox 排 reaction(gesture) → ReactionPicker 按 intent 挑表情
      → 不通过 → ignore(gestureBudget / gestureObserved)，面板可见
 ```
 

@@ -1,10 +1,10 @@
 /** Context-aware shared UI widgets: page/section headers, timestamps, Markdown rendering, and confirmation actions. */
 import { Fragment, useState, type ReactNode } from 'react'
-import type { SetupProblem } from '../setup.ts'
+import type { SetupProblem } from '../setup-errors.ts'
 import { Button, Icon, InfoTip, Modal, StateDot, type DotState, type IconName } from './controls.tsx'
 import { inlines, linkify, markdownBlocks, type Inline } from './markdown.ts'
 import { useAction, usePanel, usePanelData } from './provider.tsx'
-import { settingsRoute, type SettingsGroup } from './route.ts'
+import { settingsRoute, type SettingsGroup } from './tabs.ts'
 import { errorText, fullTime, readableMarkers, setupText, when } from './text.ts'
 
 const external = { target: '_blank', rel: 'noopener noreferrer' } as const

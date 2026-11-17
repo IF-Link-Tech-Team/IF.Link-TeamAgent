@@ -4,7 +4,7 @@ import { UserError } from '../core/index.ts'
 import { SETUP_FIELDS, resolveDeployment, resolveFeishuBot, workerProbe, type Deployment, type Machine } from '../deployment.ts'
 import { agentVariables, applyEnvironment, verifyEnvironment, withoutDirectory, workerBin, writeEnvironment } from '../infra/environment.ts'
 import type { Settings, SettingsBlock } from '../policy.ts'
-import { SetupError, type SetupProblem } from '../setup.ts'
+import { SetupError, type SetupProblem } from '../setup-errors.ts'
 
 export interface SetupDeps {
   readonly context: Context

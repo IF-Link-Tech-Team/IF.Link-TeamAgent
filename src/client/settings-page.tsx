@@ -5,7 +5,7 @@ import { EvalSettings } from './eval.tsx'
 import { ExecutionSettings } from './execution.tsx'
 import { PromptsPage } from './prompts.tsx'
 import { usePanel } from './provider.tsx'
-import { SETTINGS_GROUPS, settingsRoute, type SettingsGroup } from './route.ts'
+import { SETTINGS_GROUPS, settingsRoute, type SettingsGroup } from './tabs.ts'
 import { SettingsProvider } from './settings-kit.tsx'
 import { SourceSettings } from './source.tsx'
 

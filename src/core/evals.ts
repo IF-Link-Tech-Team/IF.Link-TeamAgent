@@ -1,8 +1,8 @@
 /** Evals: the Thread-level assessments of queued Triggers, and the Decisions they end with. */
 import { key } from './ids.ts'
 import { UserError } from './errors.ts'
-import { isOpen, QUIET_BATCH, threadKey } from './model.ts'
-import type { Decision, DecisionKind, Eval, Gesture, Mandate, MandateBasis, Strength, Thread, Trigger } from './model.ts'
+import { isOpen, QUIET_BATCH, threadKey } from './domain.ts'
+import type { Decision, DecisionKind, Eval, Gesture, Mandate, MandateBasis, Strength, Thread, Trigger } from './domain.ts'
 import type { AssessmentOutcome, Candidate, Policy } from './ports.ts'
 import { said, type Reason } from './reasons.ts'
 import { EnginePart, type EngineOptions } from './part.ts'

@@ -1,5 +1,5 @@
 /** In-memory repository implementation for testing and ephemeral engine instances. */
-import { latestAssignment, type Decision, type Thread, type Ticket, type Trigger, type TriggerDisposition } from './model.ts'
+import { latestAssignment, type Decision, type Thread, type Ticket, type Trigger, type TriggerDisposition } from './domain.ts'
 import type { Repositories } from './ports.ts'
 
 const clone = <T>(value: T): T => structuredClone(value)

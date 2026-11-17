@@ -1,7 +1,7 @@
 /** Trigger ingestion, thread correlation, subscription fan-out, and evaluation queuing. */
 import { key } from './ids.ts'
-import { isoTime, isOpen, threadKey } from './model.ts'
-import type { Ticket, Trigger } from './model.ts'
+import { isoTime, isOpen, threadKey } from './domain.ts'
+import type { Ticket, Trigger } from './domain.ts'
 import { EnginePart, type EngineOptions } from './part.ts'
 import type { Tickets } from './tickets.ts'
 

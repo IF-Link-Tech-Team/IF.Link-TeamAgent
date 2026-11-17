@@ -1,8 +1,8 @@
 /** The Engine's messages to Channels, each by the rule that allows it. */
 import { key } from './ids.ts'
 import { UserError } from './errors.ts'
-import { latestAssignment, isOpen, ticketOutcome } from './model.ts'
-import type { ChannelRef, Gesture, Strength, Ticket, Trigger } from './model.ts'
+import { latestAssignment, isOpen, ticketOutcome } from './domain.ts'
+import type { ChannelRef, Gesture, Strength, Ticket, Trigger } from './domain.ts'
 import type { ReplyStatus } from './ports.ts'
 import { EnginePart } from './part.ts'
 

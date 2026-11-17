@@ -19,7 +19,7 @@ import { SourceRegistry } from '../sources/registry.ts'
 import { Commands } from '../infra/commands.ts'
 import type { Deployment, Machine } from '../deployment.ts'
 import { environmentOf, ticketEnvironment, type Variable } from './execution-environment.ts'
-import type { SetupProblem } from '../setup.ts'
+import type { SetupProblem } from '../setup-errors.ts'
 import { DshExecutor, sourceTrigger, triggerMessage, workerSessionId } from '../executor/dsh.ts'
 import { AcpExecutor } from '../executor/acp.ts'
 import { DispatchExecutor } from '../executor/dispatch.ts'
@@ -38,7 +38,7 @@ import { candidateCard, repliedTo, sourceLink, type LinkDeps } from './links.ts'
 import { eventNotice, followupNotice } from './notices.ts'
 import { pullEndNotices } from '../sources/github-pull.ts'
 import { HealthBoard } from '../infra/health.ts'
-import { MarkPicker, type MarkChooser } from './marks.ts'
+import { ReactionPicker, type ReactionChooser } from './reaction-picker.ts'
 import { Gestures } from './gestures.ts'
 import { Outbox } from './outbox.ts'
 import { Passes } from './passes.ts'
@@ -157,13 +157,13 @@ export class Runtime extends Service implements SourceHost {
       // The pick reads the message and the work around it. Its account and model come from the Marks settings on every
       // pick, falling back to the environment; without either it stays quiet and a Channel draws its own mark.
       const marksHealth = board.claim('marks', { state: 'ready', detail: 'No mark picked yet' })
-      const markAccount = () => {
+      const reactionAccount = () => {
         const config = store.settings().marks
         return { config, account: config.account || process.env.CLOUDFLARE_ACCOUNT_ID || '',
           token: config.token || process.env.CLOUDFLARE_WORKERS_AI_API_KEY || process.env.CLOUDFLARE_API_KEY || '' }
       }
-      const marks: MarkChooser = { pick: async message => {
-        const { config, account, token } = markAccount()
+      const marks: ReactionChooser = { pick: async message => {
+        const { config, account, token } = reactionAccount()
         if (!config.enabled) {
           marksHealth.set({ state: 'paused', detail: 'Mark picking is off', at: new Date().toISOString() })
           return undefined
@@ -173,10 +173,10 @@ export class Runtime extends Service implements SourceHost {
             at: new Date().toISOString() })
           return undefined
         }
-        return new MarkPicker({ store, health: marksHealth }, { account, token, model: config.model, timeoutMs: config.timeoutMs }).pick(message)
+        return new ReactionPicker({ store, health: marksHealth }, { account, token, model: config.model, timeoutMs: config.timeoutMs }).pick(message)
       } }
       // Report the starting state once; a later save is reflected by the next pick.
-      const initialMarks = markAccount()
+      const initialMarks = reactionAccount()
       if (!initialMarks.config.enabled) marksHealth.set({ state: 'paused', detail: 'Mark picking is off', at: new Date().toISOString() })
       else if (!initialMarks.account || !initialMarks.token) marksHealth.set({ state: 'paused',
         detail: 'Set the Cloudflare account and token in the Marks settings', at: new Date().toISOString() })

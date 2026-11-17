@@ -1,7 +1,7 @@
 /** Shared base class and configuration for Engine domain parts. */
 import { UserError } from './errors.ts'
-import { followupOwners, reached, threadKey } from './model.ts'
-import type { Gesture, Thread, ThreadRef, Ticket, Trigger } from './model.ts'
+import { followupOwners, reached, threadKey } from './domain.ts'
+import type { Gesture, Thread, ThreadRef, Ticket, Trigger } from './domain.ts'
 import type { Assessor, AssessmentOutcome, DomainEvent, DomainEvents, Executor, Outbox, Policy, Repositories, SourceScope } from './ports.ts'
 
 /** Decides whether a social reaction may be drawn now; a refusal records why in the Decision instead of drawing one. */

@@ -1,6 +1,6 @@
 /** The emoji a took-up message wears, picked by a decision model from the emoji Feishu offers. */
 import { expect, it, vi } from 'vitest'
-import { MarkPicker } from '../src/app/marks.ts'
+import { ReactionPicker } from '../src/app/reaction-picker.ts'
 import type { OutboundMessage, Ticket, Trigger } from '../src/core/index.ts'
 import { FEISHU_EMOJIS } from '../src/feishu-emojis.ts'
 import { feishu, startRuntime, type Host } from './fixtures/host.ts'
@@ -22,7 +22,7 @@ function picker(h: Host, response: unknown, options: { reject?: Error; account?:
     return { json: async () => response }
   })
   const health = { state: 'ready', detail: '', set: vi.fn(), get: () => undefined, release: () => {} }
-  const chooser = new MarkPicker({ store: h.runtime.store, health: health as never }, { account: options.account ?? 'acct',
+  const chooser = new ReactionPicker({ store: h.runtime.store, health: health as never }, { account: options.account ?? 'acct',
     token: options.token ?? 'tok', fetch: fetch as unknown as typeof globalThis.fetch, timeoutMs: 1000 })
   return { chooser, calls, fetch, health }
 }

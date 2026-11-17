@@ -7,15 +7,15 @@ import { threadKey } from '../core/index.ts'
 import type { Store } from './store.ts'
 
 /** The Cloudflare Workers AI account and token the pick needs; without both the pick is skipped and a Channel keeps its own mark. */
-export interface MarkAccount { account: string; token: string }
+export interface ReactionAccount { account: string; token: string }
 export interface MarkPickerDeps {
   readonly store: Pick<Store, 'triggers' | 'tickets' | 'decisions' | 'read'>
   readonly health: HealthEntry
 }
 /** What one pick answered: the emoji, the tone the model read, and how sure it was. */
-export interface MarkPick { emoji: string; tone?: string; confidence?: number }
+export interface ReactionPick { emoji: string; tone?: string; confidence?: number }
 /** A model's pick over the emoji a Channel can draw, or undefined to leave the Channel its own. */
-export interface MarkChooser { pick(message: OutboundMessage): Promise<MarkPick | undefined> }
+export interface ReactionChooser { pick(message: OutboundMessage): Promise<ReactionPick | undefined> }
 
 /** One answer of one question: a choice, its probabilities and the model's confidence; `noul` and `score` answers differ. */
 const Answer = z.object({ type: z.string(), choice: z.string().optional(), confidence: z.number().optional() })
@@ -53,8 +53,8 @@ const TEXT_CHARS = 600, TITLE_CHARS = 120, SCOPE_CHARS = 300, HISTORY = 5, HISTO
  * message, the Router's judgement about it and the Thread it came from. The decision costs one request; a missing account,
  * a failed call or an answer the Channel cannot draw leaves the Channel its own mark, so the mark never waits on the model.
  */
-export class MarkPicker implements MarkChooser {
-  constructor(private readonly host: MarkPickerDeps, private readonly options: MarkAccount & {
+export class ReactionPicker implements ReactionChooser {
+  constructor(private readonly host: MarkPickerDeps, private readonly options: ReactionAccount & {
     model?: string; timeoutMs?: number; fetch?: typeof globalThis.fetch
   }) {}
   /** Whether the pick can run: both the account and its token are configured. */
@@ -63,7 +63,7 @@ export class MarkPicker implements MarkChooser {
    * Ask the model which emoji this message should wear.
    * @returns the emoji and what the model read, or undefined when the pick failed and the Channel should keep its own mark.
    */
-  async pick(message: OutboundMessage): Promise<MarkPick | undefined> {
+  async pick(message: OutboundMessage): Promise<ReactionPick | undefined> {
     if (!this.configured) return undefined
     const trigger = this.trigger(message)
     if (!trigger) return undefined

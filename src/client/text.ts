@@ -2,7 +2,7 @@
 import type { Translate } from '@deepseek-ai/dsh-client-ui-slots'
 import type { DshSuperagentKey } from './locales.ts'
 import type { Localized } from '../sources/kind.ts'
-import type { SetupProblem } from '../setup.ts'
+import type { SetupProblem } from '../setup-errors.ts'
 import type { Health } from '../sources/host.ts'
 import { reasonText, type Reason } from '../core/reasons.ts'
 

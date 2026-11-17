@@ -2,7 +2,7 @@
 import type { EngineForSources, ReceiveResult, Trigger } from '../core/index.ts'
 import type { Deployment } from '../deployment.ts'
 import type { Commands } from '../infra/commands.ts'
-import type { SetupProblem } from '../setup.ts'
+import type { SetupProblem } from '../setup-errors.ts'
 import type { Activity, SourceContext } from '../sources/host.ts'
 import type { SourceRegistry } from '../sources/registry.ts'
 import type { Outbox } from './outbox.ts'

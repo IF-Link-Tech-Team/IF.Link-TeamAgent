@@ -1,5 +1,5 @@
 /** Reusable proactive-agent core: model, ports, engine and in-memory repositories. */
-export * from './model.ts'
+export * from './domain.ts'
 export * from './ports.ts'
 export type { GestureBudget } from './part.ts'
 export { Engine, type EngineForExecutor, type EngineForMainSession, type EngineForPeople, type EngineForSettings, type EngineForSources,

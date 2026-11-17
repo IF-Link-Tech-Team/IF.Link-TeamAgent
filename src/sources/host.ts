@@ -3,7 +3,7 @@ import type { ChannelRef, ReceiveResult, OutboundMessage, Thread, ThreadFact, Th
 import type { Commands } from '../infra/commands.ts'
 import type { Deployment } from '../deployment.ts'
 import type { SourceRegistry } from './registry.ts'
-import type { SetupProblem } from '../setup.ts'
+import type { SetupProblem } from '../setup-errors.ts'
 import type { Family, Key } from '../kv.ts'
 import { fill } from '../infra/text.ts'
 

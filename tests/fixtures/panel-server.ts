@@ -14,7 +14,7 @@ import type { DroppedReply, HistoryView, Problem, PromptsView, SetupView, Source
   TriggerRow } from '../../src/client/api.ts'
 import { SETUP_FIELDS } from '../../src/deployment.ts'
 import { DispatchConfigSchema, EvalConfigSchema, ExecutorConfigSchema, MarksConfigSchema, PolicyConfigSchema, RoutingConfigSchema, RuntimeProfileSchema, SETTINGS_MASK, SettingsSchema } from '../../src/policy.ts'
-import { SetupError, type SetupCode } from '../../src/setup.ts'
+import { SetupError, type SetupCode } from '../../src/setup-errors.ts'
 import { feishuChannel } from '../../src/sources/feishu-trigger.ts'
 import { githubChannel } from '../../src/sources/github-trigger.ts'
 import { feishuKind } from '../../src/sources/feishu.ts'

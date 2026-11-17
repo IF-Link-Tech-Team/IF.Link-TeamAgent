@@ -1,8 +1,8 @@
 /** What the Executor and its workers report about the Assignments that run tickets. */
 import { key } from './ids.ts'
 import { UserError } from './errors.ts'
-import { latestAssignment, isOpen, runningAssignment } from './model.ts'
-import type { ReportState, Ticket } from './model.ts'
+import { latestAssignment, isOpen, runningAssignment } from './domain.ts'
+import type { ReportState, Ticket } from './domain.ts'
 import { EnginePart, type EngineOptions } from './part.ts'
 import type { Replies } from './replies.ts'
 import { automatic, type Tickets } from './tickets.ts'

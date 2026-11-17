@@ -425,7 +425,7 @@ flowchart LR
 | 准入与研判（规则、名单、强度、版本） | `src/policy.ts`、`src/admission.ts` |
 | 飞书/ GitHub 收发 | `src/sources/feishu*.ts`、`src/sources/github*.ts` |
 | 执行器（目录、并发、恢复、报告） | `src/executor/dsh.ts`、`src/executor/background.ts` |
-| 记忆与检索、表情 | `src/app/resources.ts`、`src/app/store.ts`（FTS）、`src/app/marks.ts`、`src/feishu-emojis.ts` |
+| 记忆与检索、表情 | `src/app/resources.ts`、`src/app/store.ts`（FTS）、`src/app/reaction-picker.ts`、`src/feishu-emojis.ts` |
 | 模型路由 | `src/app/model-router.ts`、`src/app/role-models.ts` |
 | 提示词 | `prompts/*.md` + `prompts/team/*.md`（面板 revision 12 生效） |
 | 团队记忆 | `memory/*.md`（只经 `scripts/memory-commit.sh`）、`memory/journal/` |

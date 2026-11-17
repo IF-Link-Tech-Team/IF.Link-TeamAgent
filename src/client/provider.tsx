@@ -2,7 +2,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { caller, usePoll, type ApiMessages, type Call, type SetupView, type StateView } from './api.ts'
-import type { Route } from './route.ts'
+import type { Route } from './tabs.ts'
 import STYLES from './client.css?raw'
 import { errorText, setupText, valueLabel, type T } from './text.ts'
 

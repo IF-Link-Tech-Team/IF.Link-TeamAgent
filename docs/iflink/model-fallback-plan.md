@@ -169,7 +169,7 @@ target ≠ resolved 时覆盖 provider/model/effort（不继承旧 effort）
 | `src/app/model-router.ts`（新） | 熔断表、选路、失败处理、探活、health |
 | `src/app/sessions.ts` | seeding 收进 router；decorate 时装监听、保证注册顺序 |
 | `src/executor/dsh.ts` | 主 Session 的 `agent/error` 分支（现在直接 return）+ 续跑 |
-| `src/app/views/settings.ts` | 把每条 route 的运行时状态带给面板 |
+| `src/app/views/settings-view.ts` | 把每条 route 的运行时状态带给面板 |
 | `src/client/settings-kit.tsx`、`eval.tsx`、`execution.tsx`、`client.css` | `ModelChainField` 组件、拖拽、行样式 |
 | `src/client/locales.ts` | 文案 |
 | `tests/` | schema、保存校验、选路/熔断单测、面板拖拽 jsdom 测试 |
@@ -222,7 +222,7 @@ target ≠ resolved 时覆盖 provider/model/effort（不继承旧 effort）
 | 主 Session 探活 | 主路由冷却期间每 60 秒（面板可改）发一个 8-token 的探针；成功即提前关冷却 | 同上 |
 | 失败后续跑 | 主 Session 的 `agent/error` 分支：路由真的换过才补一句"接着刚才的继续"，不空转 Eval 死线 | `src/executor/dsh.ts`（`masterFailed`） |
 | 降级收自治 | 主 Session 不在主模型上时 `admitsInferred` 拒绝推断式准入 | `src/policy.ts`、`src/app/runtime.ts` |
-| 可观测 | `model-fallback` health：有路由冷却即 `error`，恢复即 `ready`；同时进 Overview 的 runtime-error 与现有巡检的"健康检查未就绪"告警 | `src/app/runtime.ts`、`src/app/views/settings.ts` |
+| 可观测 | `model-fallback` health：有路由冷却即 `error`，恢复即 `ready`；同时进 Overview 的 runtime-error 与现有巡检的"健康检查未就绪"告警 | `src/app/runtime.ts`、`src/app/views/settings-view.ts` |
 | 面板状态 | 设置视图带 `routes`，链上每行显示正常/冷却中 | `views/settings.ts`、`client/settings-kit.tsx` |
 | 资源 | `models` 资源额外返回 `fallbacks`，主 Session 能看到备用链 | `src/app/resources.ts` |
 

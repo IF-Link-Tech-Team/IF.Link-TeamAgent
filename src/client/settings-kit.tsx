@@ -7,7 +7,7 @@ import { usePoll, type HistoryView, type Settings, type SettingsView, type Sourc
 import { Button, DisclosureRow, Icon, InfoTip, Input, SegmentedControl, StateDot, Switch } from './controls.tsx'
 import { useDraft } from './draft.tsx'
 import { useAction, usePanel, usePanelData } from './provider.tsx'
-import { settingsRoute } from './route.ts'
+import { settingsRoute } from './tabs.ts'
 import { errorText, localized, valueLabel, when, type T } from './text.ts'
 import { Hint, LoadState } from './widgets.tsx'
 

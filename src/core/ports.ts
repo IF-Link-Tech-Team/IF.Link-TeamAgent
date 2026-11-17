@@ -1,6 +1,6 @@
 /** Ports the core depends on. Sources, policies, assessors, executors, and channels are project-specific. */
 import type { Assignment, ChannelRef, Decision, DecisionKind, Gesture, GestureIntent, Mandate, MandateBasis, Strength, Thread, Ticket, TicketEndBy, TicketOutcome, Trigger }
-  from './model.ts'
+  from './domain.ts'
 import type { Reason } from './reasons.ts'
 
 /** Gate admission result: either inadmissible with a reason code, or admissible with strength and MandateBasis. */
@@ -135,8 +135,8 @@ export interface Repositories {
   triggers: {
     get(id: string): Trigger | undefined
     save(trigger: Trigger): void
-    disposition(id: string): import('./model.ts').TriggerDisposition | undefined
-    saveDisposition(id: string, value: import('./model.ts').TriggerDisposition): void
+    disposition(id: string): import('./domain.ts').TriggerDisposition | undefined
+    saveDisposition(id: string, value: import('./domain.ts').TriggerDisposition): void
   }
   threads: {
     get(key: string): Thread | undefined

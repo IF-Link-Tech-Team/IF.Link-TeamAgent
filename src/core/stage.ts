@@ -1,5 +1,5 @@
 /** Ticket stage classification and retry eligibility (docs/003). */
-import { latestAssignment, blockedOnPerson, type Ticket } from './model.ts'
+import { latestAssignment, blockedOnPerson, type Ticket } from './domain.ts'
 
 /** High-level execution stage of a ticket: waiting on a person, actively working or queued, idle between turns, or ended. */
 export type TicketStage = { stage: 'person'; action: 'delivery' | 'answer' | 'review' | 'blocked' | 'failed' }

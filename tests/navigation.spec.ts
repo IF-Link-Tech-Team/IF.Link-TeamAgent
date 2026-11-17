@@ -3,7 +3,7 @@ import { expect, it, vi } from 'vitest'
 import type { ISessions } from '@deepseek-ai/dsh-api-session-controller/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import { openKnownSession } from '../src/navigation.ts'
-import { initialLocation, parseRoute, remember, setupPage } from '../src/client/route.ts'
+import { initialLocation, parseRoute, remember, setupPage } from '../src/client/tabs.ts'
 const id = 'orchestrator-test' as SessionId
 function fixture(ready = false) {
   const pending = Promise.withResolvers<void>()

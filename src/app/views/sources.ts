@@ -4,7 +4,7 @@ import type { Deployment } from '../../deployment.ts'
 import type { Health } from '../../sources/host.ts'
 import type { SourceInstance } from '../../sources/kind.ts'
 import type { SourceRegistry } from '../../sources/registry.ts'
-import type { SetupProblem } from '../../setup.ts'
+import type { SetupProblem } from '../../setup-errors.ts'
 import { dayAgo, snapshot, type ViewDeps } from './records.ts'
 import { preview } from './text.ts'
 

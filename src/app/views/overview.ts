@@ -1,7 +1,7 @@
 /** Overview view: active system problems, tickets awaiting human action, executor load, and 24-hour trigger flow. */
 import { reasonText, ticketStage, type Decision, type Thread } from '../../core/index.ts'
 import type { Health } from '../../sources/host.ts'
-import type { SetupProblem } from '../../setup.ts'
+import type { SetupProblem } from '../../setup-errors.ts'
 import { anyoneAllowed } from '../../policy.ts'
 import type { Store } from '../store.ts'
 import { awaitingEval, dayAgo, newestFirst, ownersOf, snapshot, threadSummary, type ViewDeps } from './records.ts'
