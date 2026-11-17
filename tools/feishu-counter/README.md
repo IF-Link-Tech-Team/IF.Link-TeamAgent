@@ -1,6 +1,6 @@
 # 飞书 API 请求计数器（本地网络层）
 
-> 完整说明（架构、额度口径、数据表、排障、2026-11 的账）见 [docs/iflink/feishu-counter.md](../../docs/iflink/feishu-counter.md)；
+> 完整说明（架构、额度口径、数据表、排障、2026-11 的账）见 [docs/iflink/feishu-quota.md](../../docs/iflink/feishu-quota.md)；
 > 这里只留安装与验证。
 
 数这台机器**实际发出**的飞书 HTTP 请求，不依赖编排进程里的埋点。

@@ -31,6 +31,9 @@ Read the numbered documents in order; each builds only on the ones before it.
 - [006 Deployment](docs/006-deployment.md): manual setup, configuration, upgrades and troubleshooting
 - [007 Architecture](docs/007-architecture.md)
 - [008 Cookbook](docs/008-cookbook.md): adding a Source
+- [009 DSH primer](docs/009-dsh-primer.md): the harness concepts this bundle uses
+
+The names used across code and documents are in [docs/GLOSSARY.md](docs/GLOSSARY.md). To change the code, read [CONTRIBUTING.md](CONTRIBUTING.md) first: it lists the four ends of a setting, the five invariants, and the tests that fail when the paperwork is missing.
 
 ## IF.Link practice notes
 

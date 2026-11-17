@@ -2,6 +2,9 @@
 
 更新：2026-11-13 · 代码在 `src/sources/clawchat.ts` 与 `clawchat-protocol.ts`
 
+> 状态（2026-11-17）：通道已接进 profile（`dsh-superagent-clawchat`，`disabled: false`），配对与开关在面板 Sources 页；
+> 群里实际的日常使用没有推广，飞书仍是主通道。这篇留作“不烧额度的第三条路”的设计记录。
+
 ## 一、为什么接它
 
 飞书的约束不是钱，是**次数**：免费版 100 万次/月、单租户所有自建应用合计，而"读一条消息"就是一次调用。

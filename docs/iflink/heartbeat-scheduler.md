@@ -1,7 +1,7 @@
 # 心跳与调度：把「主动」做成一个 Source
 
 > 写于 2026-11-12。对象：`dsh-superagent`。
-> 上游判断见 [team-agent-framework.md](team-agent-framework.md) 第五节缺口 1–2、[upgrade-plan.md](upgrade-plan.md) D1（Scheduler Source 未做）、[memory-module.md](memory-module.md) 第 9 节（A/B/C 三方案，选了 A+B，C 记作"等以后"）。
+> 上游判断见 [team-agent-framework.md](team-agent-framework.md) 第五节缺口 1–2、[upgrade-plan.md](upgrade-plan.md) D1（Scheduler Source 未做），以及记忆设计早期对定时写 journal 做的 A/B/C 三方案比较（选了 A+B，C 记作"等以后"）。
 > 外部参考：[OpenClaw Heartbeat](https://docs.openclaw.ai/zh-CN/gateway/heartbeat)、[OpenClaw Automations](https://docs.openclaw.ai/automation/cron-jobs)。
 > 一句话：**心跳不是一个新模块，是一条新的 Trigger 来源；它的产出止于 Decision，不直接发言。**
 >
@@ -14,7 +14,7 @@
 | 判断 | 内容 |
 |---|---|
 | 要做什么 | 新增 Source kind `scheduler`：L0 程序心跳（无模型，按到期/阈值产生 Trigger）+ L1 模型心跳（低频唤起主 Session，判断"有没有值得开口的事"） |
-| 不用做什么 | **不用改准入代码**。`machineGate` 已有 senderless 分支，系统触发器天然只能成为 `inferred` 候选 —— 这一点与 `memory-module.md` 里"C 要改准入逻辑、工作量最大"的判断不同，见第三节 |
+| 不用做什么 | **不用改准入代码**。`machineGate` 已有 senderless 分支，系统触发器天然只能成为 `inferred` 候选 —— 这一点与记忆设计里"C 要改准入逻辑、工作量最大"的早期判断不同，见第三节 |
 | 最大风险 | 噪音与 token。所以：心跳只能在 `auto` 下建单、默认 `observe` 观察、夜间只跑到点类、每次产出必须有 `NOTHING` 这个廉价出口 |
 | 与 OpenClaw 的根本差别 | 它是单人助手，心跳**在会话里说一句话**；我们是团队同事，心跳**只能产生 Decision 或工单**，发言权仍在 Outbox 和规则 |
 | 与现有运维的分工 | `monitor.sh` 报"系统坏了"，心跳报"这件事该有人管了"。同一件事只允许一个通道报 |
@@ -39,7 +39,7 @@
 
 ## 三、事实核查：准入不用改（本次最重要的修正）
 
-`memory-module.md` 把 C 方案标成"工作量最大"，理由是"系统任务不该走人的授权门槛"。读了代码之后结论相反：
+记忆设计早期把 C 方案标成"工作量最大"，理由是"系统任务不该走人的授权门槛"。读了代码之后结论相反：
 
 `src/policy.ts` 的 gate 第一行就分流了非人类触发器：
 
@@ -565,7 +565,7 @@ now - lastEventAt < 10min                  → 醒（搭车：既有变化，又
 | 心跳改模型设置 | OpenClaw 的上下文溢出坑；我们的 `ModelRouter` 每次请求重读设置，更容易中 |
 | 为取材去调飞书 API | 素材已经在本地库里：10 个群 `listen: all`、3,720 条 Trigger、近 24 小时 420 条（其中 365 条没 @）。心跳用本地 SQL/FTS 取材，零 API |
 | 把 monitor 的检查项搬进心跳 | 见第八节 || 补跑多个错过的窗口 | 过期的提醒发出来就是噪音 |
-| 新增 `HEARTBEAT.md` 之类的清单文件 | 记忆总量才 8k 字符，现查 `PROJECTS.md` + `drafts` 就够；多一个文件就多一处会过期（同 [memory-architecture-v2.md](memory-architecture-v2.md) 第十三节） |
+| 新增 `HEARTBEAT.md` 之类的清单文件 | 记忆总量才 8k 字符，现查 `PROJECTS.md` + `drafts` 就够；多一个文件就多一处会过期（同 [memory.md](memory.md) 里"不做注入层 / 索引文件"的判断） |
 
 ---
 

@@ -430,6 +430,6 @@ flowchart LR
 | 提示词 | `prompts/*.md` + `prompts/team/*.md`（面板 revision 12 生效） |
 | 团队记忆 | `memory/*.md`（只经 `scripts/memory-commit.sh`）、`memory/journal/` |
 | 团队技能 | `skills/<名字>/SKILL.md` |
-| 运维 | `BuildTeamAgent/teamagent-monitor.sh`、`scripts/dsh-superagent`、systemd user units |
+| 运维 | `~/TeamAgent/ops/scripts/monitor-system.sh`、`scripts/dsh-superagent`、systemd user units |
 
 设计文档按顺序读：`docs/000-philosophy.md` → `001-domain` → `002-authorization` → `003-execution` → `004-prompts` → `005-panel` → `006-deployment` → `007-architecture`；IF.Link 的实践记录在 `docs/iflink/`。

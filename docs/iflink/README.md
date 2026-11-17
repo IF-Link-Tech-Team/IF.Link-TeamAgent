@@ -3,8 +3,9 @@
 这个目录不属于 dsh-superagent 原型本身，是 [IF.Link（东南大学 AI 创客社区）](https://iflink.tech/)把
 它改造成**一个团队共用的 AI 同事**时留下的思考与设计记录，整理出来供其他团队参考。
 
-代码层面的改动很小（见根目录的两个提交：GitHub Source 变为可选、工单目录名不再强制英文、
-团队记忆与全文检索）。真正花时间的是"怎么让它成为一个能被团队接受、能长期活下去的同事"——
+代码层面的改动比最初设想的大：相对上游原型新增 16 个文件（约 3,400 行）、改动大部分已有文件
+（约 +5,600/−620 行），包括 GitHub Source 变为可选、工单目录名不再强制英文、团队记忆与全文检索，
+以及飞书 / ClawChat / Scheduler 三个来源、模型路由和面板。真正花时间的是"怎么让它成为一个能被团队接受、能长期活下去的同事"——
 也就是这里的文档所讨论的部分。
 
 **阅读前请明确：这里写的是我们在特定约束下的判断，不是通用最佳实践。** 很多结论依赖我们的规模
@@ -13,31 +14,30 @@
 
 ## 从哪里开始
 
+> 术语提示：这些文档写于 2026 年 11 月上旬，保留了当时的叫法——「线程」现在叫**话题**（thread）、
+> 「研判」叫**评估判断**（assessment）、「派工」叫**执行分配**（assignment）、「扇出」叫**分发**（fan-out）。
+> 现行术语以代码仓的 `docs/GLOSSARY.md` 为准。
+
 | 想了解什么 | 读哪篇 |
 |---|---|
 | 整套系统现在是怎么搭起来的（继承了什么、叠了什么） | [team-agent-framework.md](team-agent-framework.md) |
 | 我们要一个什么样的 Agent，需求怎么定的 | [requirements.md](requirements.md) |
 | 从现有原型到目标形态，怎么排步骤、卡在过哪 | [upgrade-plan.md](upgrade-plan.md) |
-| 记忆怎么设计：存什么、谁来写、怎么防止写歪 | [memory-module.md](memory-module.md) |
-| 记忆的写路径后来为什么改成"只有一个写者" | [memory-architecture-v2.md](memory-architecture-v2.md) |
-| 别人的记忆产品怎么做，我们借鉴了什么 | [hermes-memory-research.md](hermes-memory-research.md) |
-| Agent 该在什么情况下说话、什么情况下闭嘴 | [router-prompts.md](router-prompts.md) |
+| 记忆怎么设计：存什么、谁来写、怎么读、上限在哪 | [memory.md](memory.md) |
 | 什么请求该转成任务、什么该拒绝 | [policy-rules.md](policy-rules.md) |
 | 模型挂了怎么自动换、备用链怎么在面板里拖 | [model-fallback-plan.md](model-fallback-plan.md) |
 | Router 留 DSH、Worker 换 Kimi/Claude/Antigravity 的架构方案 | [worker-runtime-multi-harness.md](worker-runtime-multi-harness.md) |
-| 飞书 API 额度怎么压下来，以及一次"改了但没生效"的教训 | [feishu-quota.md](feishu-quota.md) |
+| 飞书 API 额度怎么算、三套计数怎么看、超了会怎样 | [feishu-quota.md](feishu-quota.md) |
 | 模型 token 花在哪、为什么 router 一条会话吃掉 65% | [model-token-cost.md](model-token-cost.md) |
-| 给团队里其他 Agent 的省额度清单（不分框架） | [agent-quota-guide.md](agent-quota-guide.md) |
 | 想聊天又不想烧 API 额度：Agent 原生的 ClawChat 通道 | [clawchat.md](clawchat.md) |
 | 怎么让它不只在被叫到时才在（心跳、定时任务、主动开口） | [heartbeat-scheduler.md](heartbeat-scheduler.md) |
-| 更上游的思考：super-agent 的分层与交互 | [super-agent-design.md](super-agent-design.md) |
 
 ## 四点可能对别人有用的结论
 
 **1. 先跑起来，再变聪明。** 升级方案把"能在群里被 @、能建工单、能回话"和"有记忆、会主动"分成了
 两步且顺序不可颠倒。先打通闭环的好处是：后面每一个设计决策都有真实数据可依，而不是想象出来的场景。
 
-**2. 记忆要小，且只能从一扇门进。** 记忆模块设了硬上限（TEAM.md 2,000 字符、PROJECTS.md 6,000 字符），
+**2. 记忆要小，且只能从一扇门进。** 记忆模块设了硬上限（TEAM.md 2,000 字符、PROJECTS.md 8,000 字符，两日 journal 1,500），
 超限必须合并而不是追加；写入只走一个脚本，带写前快照、字数检查、注入扫描和变更日志。让模型自由
 编辑记忆文件，很快就会得到一堆互相矛盾的过期事实。
 
