@@ -1,6 +1,6 @@
 # 心跳与调度：把「主动」做成一个 Source
 
-> 写于 2026-11-12。对象：`dsh-superagent-prototype-IF.Link`。
+> 写于 2026-11-12。对象：`dsh-superagent`。
 > 上游判断见 [team-agent-framework.md](team-agent-framework.md) 第五节缺口 1–2、[upgrade-plan.md](upgrade-plan.md) D1（Scheduler Source 未做）、[memory-module.md](memory-module.md) 第 9 节（A/B/C 三方案，选了 A+B，C 记作"等以后"）。
 > 外部参考：[OpenClaw Heartbeat](https://docs.openclaw.ai/zh-CN/gateway/heartbeat)、[OpenClaw Automations](https://docs.openclaw.ai/automation/cron-jobs)。
 > 一句话：**心跳不是一个新模块，是一条新的 Trigger 来源；它的产出止于 Decision，不直接发言。**

@@ -1,6 +1,6 @@
 # IFLink Team Agent 整体框架
 
-> 写于 2026-11-09。梳理对象：`dsh-superagent-prototype-IF.Link`（在跑的服务）+ `~/TeamAgent`（记忆、技能、运维）。
+> 写于 2026-11-09。梳理对象：`dsh-superagent`（在跑的服务）+ `~/TeamAgent/ops`（记忆、技能、运维）。
 > 分三部分：**一、继承的主干**（原本的架构）→ **二、我们叠上去的六层改进** → **三、合起来的整体框架**。
 
 ---

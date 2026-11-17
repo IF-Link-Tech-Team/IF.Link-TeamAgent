@@ -76,7 +76,7 @@ CA 私钥在 `~/.dsh/feishu-counter/ca.key`（0600），一年一换；`certs/` 
 ## 5. 怎么用
 
 ```bash
-cd ~/TeamAgent/dsh-superagent-prototype-IF.Link/tools/feishu-counter
+cd ~/TeamAgent/dsh-superagent/tools/feishu-counter
 
 ./report.py                 # 最近两天：计入额度 / 不计入 / 合计 / 编排自记 / 差
 ./report.py -n 7 --by role  # 一周，按调用方

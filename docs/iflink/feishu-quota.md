@@ -165,7 +165,7 @@ const envMinutes = (name, fallback) => {
 ## 六、运维
 
 ```bash
-cd ~/TeamAgent/dsh-superagent-prototype-IF.Link
+cd ~/TeamAgent/dsh-superagent
 pnpm build
 busctl --user call org.freedesktop.systemd1 /org/freedesktop/systemd1 \
   org.freedesktop.systemd1.Manager RestartUnit ss dsh-superagent.service replace

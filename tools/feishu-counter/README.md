@@ -44,7 +44,7 @@ lark-cli ──HTTPS_PROXY──▶ 127.0.0.1:18080（本代理）
 ## 安装
 
 ```bash
-cd ~/TeamAgent/dsh-superagent-prototype-IF.Link/tools/feishu-counter
+cd ~/TeamAgent/dsh-superagent/tools/feishu-counter
 chmod +x counter.py ca.sh report.py
 ./ca.sh                                   # 生成 CA + 合并信任包（系统 CA 也在里面）
 mkdir -p ~/.config/systemd/user
