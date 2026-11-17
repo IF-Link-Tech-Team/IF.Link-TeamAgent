@@ -56,7 +56,7 @@ function routeConfig(resolved: LlmCallConfig, route: RoleModel): LlmCallConfig {
 }
 
 /** Host dependencies of the router. */
-export interface ModelRouterHost {
+export interface ModelRouterDeps {
   readonly context: Context
   readonly store: Pick<Store, 'settings'>
   /** The main Session's id: its chain is the router's, every other Session's is the Executor's. */
@@ -85,7 +85,7 @@ export class ModelRouter {
   private disposed = false
   private stopped = false
 
-  constructor(private readonly host: ModelRouterHost, options: ModelRouterOptions = {}) {
+  constructor(private readonly host: ModelRouterDeps, options: ModelRouterOptions = {}) {
     this.options = options
   }
 

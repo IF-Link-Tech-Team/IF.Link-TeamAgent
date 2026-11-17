@@ -73,7 +73,7 @@ const BLOCKS: Record<'policy' | 'eval' | 'executor' | 'routing' | 'marks' | 'run
 }
 
 /** Host dependencies used by `Settings`. */
-export interface SettingsHost {
+export interface SettingsDeps {
   readonly store: Pick<Store, 'settings' | 'saveSettings' | 'blockRevision' | 'atomic' | 'tickets' | 'get'>
   readonly sources: SourceRegistry
   /** Notified when a settings save changes the policy version. */
@@ -112,7 +112,7 @@ export class Settings {
   private readonly syncs = new Map<string, HealthEntry>()
   /** Pending exponential-backoff retry timer and last wait duration (ms) per source after a failed sync. */
   private readonly retries = new Map<string, { timer: ReturnType<typeof setTimeout>; wait: number }>()
-  constructor(private readonly host: SettingsHost) {
+  constructor(private readonly host: SettingsDeps) {
     host.lifetime.addEventListener('abort', () => { for (const { timer } of this.retries.values()) clearTimeout(timer) }, { once: true })
   }
   /** Schedule exponential backoff retries (1 minute up to 1 hour) after a failed source sync, or clear pending retries on success. */

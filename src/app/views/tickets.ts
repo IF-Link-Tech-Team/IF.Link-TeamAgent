@@ -4,7 +4,7 @@ import { liveTicket, threadKey, ticketStage, type AcceptMode, type AdmissionCell
 import { workerSessionId } from '../../executor/dsh.ts'
 import type { Store } from '../store.ts'
 import { channelLink, decisionView, newestFirst, page, snapshot, threadSummary, ticketLine, type Snapshot,
-  type ViewHost } from './records.ts'
+  type ViewDeps } from './records.ts'
 import { markdown, preview } from './text.ts'
 
 export type BasisFact =
@@ -32,7 +32,7 @@ export function basisFacts(basis: MandateBasis, rule: Snapshot['rule']): { facts
   if (authority) facts.push({ name: 'legacyAuthority', value: authority })
   return { facts, legacy: authority !== undefined }
 }
-export function ticketList(host: ViewHost, stage: 'open' | TicketStage['stage'], offset: number, limit: number) {
+export function ticketList(host: ViewDeps, stage: 'open' | TicketStage['stage'], offset: number, limit: number) {
   const view = snapshot(host)
   const { store } = view
   const shown = (ticket: Ticket) => stage === 'open' ? liveTicket(ticket) : ticketStage(ticket).stage === stage
@@ -53,7 +53,7 @@ export function executorLoad(store: Store, running: number): ExecutorLoad {
   const queued = (ticket: Ticket) => { const stage = ticketStage(ticket); return stage.stage === 'working' && stage.action === 'queued' }
   return { running, queued: store.tickets.open().filter(queued).length }
 }
-export function ticketDetail(host: ViewHost, id: string) {
+export function ticketDetail(host: ViewDeps, id: string) {
   const { store } = host
   const ticket = store.tickets.get(id)
   if (!ticket) return undefined

@@ -9,7 +9,7 @@ import { relatedTickets, ticketCard, triggerCard } from './cards.ts'
 import type { Store } from './store.ts'
 import type { TextCache } from './cache.ts'
 
-export interface LinkHost {
+export interface LinkDeps {
   readonly store: Pick<Store, 'settings' | 'triggers' | 'threads' | 'tickets'>
   readonly links: TextCache
   readonly commands: Commands
@@ -18,7 +18,7 @@ export interface LinkHost {
 }
 
 /** Resolves and caches a trigger's external message URL, falling back to a readable resource path when lookup fails. */
-export async function sourceLink(host: LinkHost, trigger: Trigger, signal?: AbortSignal): Promise<{ source_url?: string; source_url_read?: string }> {
+export async function sourceLink(host: LinkDeps, trigger: Trigger, signal?: AbortSignal): Promise<{ source_url?: string; source_url_read?: string }> {
   if (trigger.url) return { source_url: trigger.url }
   const ref = feishuRef(trigger)
   if (!ref) return {}
@@ -45,14 +45,14 @@ export function repliedTo({ store, sources }: { store: Pick<Store, 'triggers'>; 
   return parent === undefined ? undefined : store.triggers.get(parent)
 }
 /** Finds tickets subscribed to threads referenced in `trigger.text` (such as `#12` or URLs) that are not already in `known`. */
-function referencedTickets(host: LinkHost, trigger: Trigger, known: readonly Ticket[]): Ticket[] {
+function referencedTickets(host: LinkDeps, trigger: Trigger, known: readonly Ticket[]): Ticket[] {
   const threads = (trigger.text.match(/#\d+|https?:\/\/[^\s)>\]]+/g) ?? []).flatMap(reference => host.sources.find(reference).threads)
   const ids = new Set(threads.flatMap(thread => host.store.threads.get(thread)?.subscriptions ?? []))
   for (const ticket of known) ids.delete(ticket.id)
   return [...ids].flatMap(id => host.store.tickets.get(id) ?? []).slice(0, 4)
 }
 /** Builds the main Session's candidate card with routing metadata, handback history, and related or referenced tickets. */
-export async function candidateCard(host: LinkHost, candidate: Candidate) {
+export async function candidateCard(host: LinkDeps, candidate: Candidate) {
   const primary = candidate.triggers.at(-1)!
   const settings = host.store.settings()
   const delivered = host.store.triggers.disposition(primary.id)?.fanout ?? []

@@ -3,7 +3,7 @@ import type { Engine, ReceiveResult, Trigger } from '../core/index.ts'
 import type { HealthEntry } from '../infra/health.ts'
 import type { Effects } from './effects.ts'
 
-export interface PassesHost {
+export interface PassesDeps {
   readonly engine: Pick<Engine, 'receive' | 'evaluateDue'>
   readonly effects: Pick<Effects, 'kick' | 'idle'>
   readonly health: HealthEntry
@@ -24,7 +24,7 @@ export class Passes {
   private stopped = false
   private pumping?: Promise<void>
   private pumpAgain?: Promise<void>
-  constructor(private readonly host: PassesHost) {}
+  constructor(private readonly host: PassesDeps) {}
   start(): void { if (!this.stopped) this.timer = setInterval(() => { this.request() }, 2000) }
   stop(): Promise<unknown> {
     this.stopped = true

@@ -7,7 +7,7 @@ import { z } from 'zod'
 import type { Tool } from './tools/tool.ts'
 
 /** What the MCP server needs from the Runtime: the ticket's tools and the state directory holding its socket. */
-export interface WorkerMcpHost {
+export interface WorkerMcpDeps {
   readonly stateDir: string
   /** The executor tools of one ticket, built the same way a DSH worker Session gets them. */
   tools(ticketId: string): Tool[]
@@ -29,7 +29,7 @@ export class WorkerMcpServer {
   private readonly sockets = new Set<Socket>()
   private disposed = false
 
-  constructor(private readonly host: WorkerMcpHost) {}
+  constructor(private readonly host: WorkerMcpDeps) {}
 
   /** The socket path; it is inside the state directory, which only the operator can read. */
   get socketPath(): string { return join(this.host.stateDir, 'worker-mcp.sock') }

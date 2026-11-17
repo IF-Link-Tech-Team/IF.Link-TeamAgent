@@ -62,7 +62,7 @@ export const RESOURCES: readonly { name: string; holds: string; executor?: true 
 export const resourceGrammar = (executor: boolean): string => RESOURCES.filter(resource => !executor || resource.executor)
   .map(resource => `${resource.name}: ${resource.holds}`).join('; ')
 
-export interface ResourceHost {
+export interface ResourceDeps {
   readonly store: Pick<Store, 'get' | 'settings' | 'triggers' | 'tickets' | 'threads' | 'read' | 'decisions' | 'replyStatus'>
   readonly pages: TextCache
   readonly prompts: Pick<Prompts, 'current' | 'version' | 'history' | 'skills' | 'defaultChanged'>
@@ -77,20 +77,20 @@ export interface ResourceHost {
   feishuPageSize(): number
   sourceLink(trigger: Trigger, signal?: AbortSignal): Promise<{ source_url?: string; source_url_read?: string }>
 }
-export interface MainResourceHost extends ResourceHost {
+export interface MainResourceDeps extends ResourceDeps {
   readonly sessions: Pick<Sessions, 'status' | 'modelRetry'>
   readonly settings: Pick<Settings, 'view' | 'block'>
 }
 interface Read {
-  host: ResourceHost; resource: string; rest: string; offset: number; limit?: number
+  host: ResourceDeps; resource: string; rest: string; offset: number; limit?: number
   sessionId: string; ticketId?: string; signal?: AbortSignal
 }
 type Route = readonly [name: string, read: (read: Read) => unknown]
 
 /** Enforces that main-Session-only resources cannot be read by worker Sessions. */
-const main = ({ host, ticketId }: Read): MainResourceHost => {
+const main = ({ host, ticketId }: Read): MainResourceDeps => {
   if (ticketId || !('settings' in host)) throw new Error('This resource belongs to the main Session')
-  return host as MainResourceHost
+  return host as MainResourceDeps
 }
 const text = ({ resource, offset, limit }: Read, body: string) => textPage(resource, body, offset, limit ?? 4000)
 function list<T>({ offset, limit }: Read, fetch: (offset: number, count: number) => T[]) {
@@ -125,9 +125,9 @@ async function memoryIndex(dir: string) {
   }))
 }
 /** Check whether a worker session's ticket is authorized to read a trigger (via delivery, ticket origin, or followed thread). */
-const readable = (host: ResourceHost, ticket: Ticket, trigger: Trigger): boolean => reached(ticket, trigger, key => host.store.threads.get(key))
+const readable = (host: ResourceDeps, ticket: Ticket, trigger: Trigger): boolean => reached(ticket, trigger, key => host.store.threads.get(key))
   || ticket.origin.triggerIds.includes(trigger.id) || trigger.threads.some(ref => ticket.follows?.some(follow => follow.thread === threadKey(ref)))
-const trigger = (host: ResourceHost, id: string, ticketId?: string): Trigger => {
+const trigger = (host: ResourceDeps, id: string, ticketId?: string): Trigger => {
   const found = host.store.triggers.get(id)
   if (!found) throw new UserError('unknownTrigger')
   const ticket = ticketId ? host.store.tickets.get(ticketId) : undefined
@@ -145,7 +145,7 @@ async function sourcePage(read: Read, source: string, fetch: () => Promise<unkno
 const THREAD_DECISIONS = 5
 const triggerLine = (trigger: Trigger) => ({ trigger_id: trigger.id, actor: trigger.actor.id, human: trigger.human, at: trigger.at,
   preview: preview(trigger.text), chars: trigger.text.length, read: `trigger/${trigger.id}` })
-async function transcript(host: ResourceHost, ticketId: string) {
+async function transcript(host: ResourceDeps, ticketId: string) {
   return (await host.context.sessionController.inspect(workerSessionId(ticketId) as SessionId)).events
 }
 
@@ -298,7 +298,7 @@ const ROUTES: readonly Route[] = [
     if (!ticket) throw new UserError('unknownTicket')
     if (section === undefined) {
       const running = runningAssignment(ticket) && workerSessionId(ticket.id)
-      const retry = 'sessions' in host ? (host as MainResourceHost).sessions.modelRetry(running) : {}
+      const retry = 'sessions' in host ? (host as MainResourceDeps).sessions.modelRetry(running) : {}
       // Merge subscribed threads (including context-only subscriptions) and source-bound threads without duplicates.
       const bound = new Set((ticket.follows ?? []).map(follow => follow.thread))
       const subscribed = host.store.read.subscribedThreads().filter(thread => thread.subscriptions.includes(id))
@@ -353,7 +353,7 @@ const ROUTES: readonly Route[] = [
  * Read a paginated resource for the main Session or a ticket's worker Session.
  * Legacy prefixes (`event/`, `task/`, `observation/`) remain accepted so references in older Session history stay readable.
  */
-export async function readResource(host: ResourceHost, resource: string, offset: number, limit: number | undefined, ticketId?: string,
+export async function readResource(host: ResourceDeps, resource: string, offset: number, limit: number | undefined, ticketId?: string,
   signal?: AbortSignal) {
   const name = resource.replace(/^event\//, 'trigger/').replace(/^task\//, 'ticket/').replace(/^observation\//, 'decision/')
   const route = ROUTES.find(([route]) => route.endsWith('/') ? name.startsWith(route) : name === route)

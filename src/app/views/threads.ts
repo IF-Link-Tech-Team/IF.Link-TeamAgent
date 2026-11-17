@@ -3,10 +3,10 @@ import { threadKey, type Thread, type Ticket, type Trigger } from '../../core/in
 import type { ThreadFilter } from '../api.ts'
 import type { TextCache } from '../cache.ts'
 import { awaitingEval, channelLink, dayAgo, decisionView, newestFirst, page, snapshot, threadSummary, threadTitle, ticketLine,
-  ticketSummary, triggerView, type ViewHost } from './records.ts'
+  ticketSummary, triggerView, type ViewDeps } from './records.ts'
 import { attribute } from './text.ts'
 
-export function threadList(host: ViewHost, filter: ThreadFilter, offset: number, limit: number) {
+export function threadList(host: ViewDeps, filter: ThreadFilter, offset: number, limit: number) {
   const { store } = host
   const view = snapshot(host)
   const since = dayAgo()
@@ -26,7 +26,7 @@ export type ThreadListView = ReturnType<typeof threadList>
  * Thread timeline with triggers ordered oldest-first, inline decisions, and subscribed tickets.
  * `before` pages backward; `around` anchors the page on a specific trigger.
  */
-export function threadDetail(host: ViewHost, key: string, before: string | undefined, limit: number, around?: string) {
+export function threadDetail(host: ViewDeps, key: string, before: string | undefined, limit: number, around?: string) {
   const { store } = host
   const thread = store.threads.get(key)
   if (!thread) return undefined
@@ -56,7 +56,7 @@ export type ThreadDetailView = NonNullable<ReturnType<typeof threadDetail>>
  * Searches triggers, threads, and tickets by text, ID, source-extracted references (e.g., `#N`, URLs), or cached Feishu AppLinks.
  * @param links - Feishu message AppLinks cached since startup, keyed by chat and message ID.
  */
-export function search(host: ViewHost, query: string, links: Pick<TextCache, 'entries'>) {
+export function search(host: ViewDeps, query: string, links: Pick<TextCache, 'entries'>) {
   const { store, sources } = host
   const value = query.trim()
   if (!value) return { tickets: [], items: [], threads: [] }
@@ -87,7 +87,7 @@ export function search(host: ViewHost, query: string, links: Pick<TextCache, 'en
   return { tickets, items: items.sort((a, b) => b.at.localeCompare(a.at)).slice(0, 20).map(item), threads }
 }
 export type SearchView = ReturnType<typeof search>
-export function decisionList(host: ViewHost, kinds: string[], offset: number, limit: number, since = '') {
+export function decisionList(host: ViewDeps, kinds: string[], offset: number, limit: number, since = '') {
   const { items, more } = host.store.read.decisions({ kinds, since }, offset, limit)
   const view = snapshot(host)
   return { items: items.map(decision => decisionView(view, decision)), next_offset: more ? offset + limit : null }

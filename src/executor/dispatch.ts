@@ -7,7 +7,7 @@ import type { DshExecutor } from './dsh.ts'
 import type { AcpExecutor } from './acp.ts'
 
 /** What the dispatcher needs from the Runtime. */
-export interface DispatchExecutorHost {
+export interface DispatchExecutorDeps {
   readonly store: Pick<Store, 'tickets' | 'triggers' | 'settings'>
   readonly effects: Pick<Effects, 'enqueue' | 'handle'>
   readonly dsh: DshExecutor
@@ -23,7 +23,7 @@ export interface DispatchExecutorHost {
  * pause switch.
  */
 export class DispatchExecutor implements Executor {
-  constructor(private readonly host: DispatchExecutorHost) {}
+  constructor(private readonly host: DispatchExecutorDeps) {}
 
   /** Adds the chosen route to the ticket's execution, after the DSH naming and assignment text are prepared. */
   prepare(ticket: Ticket, outcome: Extract<AssessmentOutcome, { kind: 'accept' }>): Ticket {

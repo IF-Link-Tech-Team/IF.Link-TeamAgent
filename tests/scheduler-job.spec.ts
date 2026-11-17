@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { Ticket, Trigger } from '../src/core/index.ts'
 import { ALLOWED_RULES, draftEntries, endedEntries, heartbeatTrigger, memoryMtime, openEntries, scheduledTrigger,
-  SchedulerConfigSchema, schedulerKind, tickScheduler, type SchedulerHost } from '../src/sources/scheduler.ts'
+  SchedulerConfigSchema, schedulerKind, tickScheduler, type SchedulerDeps } from '../src/sources/scheduler.ts'
 import { age, BEAT_POLICY, beatDue, buildChecklist, CHECKLIST_BUDGET, deadlineLines, dueDay, dueFollows, emptyChecklist,
   fireWindow, inActiveHours, instantOf, lastScheduledAt, nextFireAt, stampOf, wallClock, type Schedule } from '../src/sources/scheduler-job.ts'
 
@@ -328,7 +328,7 @@ describe('heartbeatTrigger', () => {
 describe('tickScheduler with no configuration', () => {
   it('reports nothing and touches nothing, so a Source switched on later starts on the next tick', async () => {
     const received: Trigger[] = []
-    const ctx: SchedulerHost = {
+    const ctx: SchedulerDeps = {
       config: () => undefined,
       receive: trigger => { received.push(trigger); return 'stored' },
       state: { get: () => undefined, set: () => {} },

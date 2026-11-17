@@ -6,7 +6,7 @@ import { agentVariables, applyEnvironment, verifyEnvironment, withoutDirectory, 
 import type { Settings, SettingsBlock } from '../policy.ts'
 import { SetupError, type SetupProblem } from '../setup.ts'
 
-export interface SetupHost {
+export interface SetupDeps {
   readonly context: Context
   readonly machine: Machine
   readonly lifetime: AbortSignal
@@ -30,7 +30,7 @@ export class Setup {
   /** Environment variables pointing agent subprocesses at the isolated git config and command shims. */
   private readonly variables: Record<string, string | undefined>
   private restoreEnvironment?: () => void
-  constructor(private readonly host: SetupHost) {
+  constructor(private readonly host: SetupDeps) {
     this.path = withoutDirectory(process.env.PATH ?? '', workerBin(host.machine.stateDir))
     this.variables = agentVariables(host.machine.stateDir)
   }

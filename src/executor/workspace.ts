@@ -29,7 +29,7 @@ export async function copyMemory(from: string, to: string): Promise<void> {
 }
 
 /** What preparing a workspace needs from the Runtime. */
-export interface WorkspaceHost {
+export interface WorkspaceDeps {
   readonly store: Pick<Store, 'settings'>
   readonly context: Pick<Context, 'subprocess'>
   readonly machine: Pick<Machine, 'memoryDir'>
@@ -42,7 +42,7 @@ export interface WorkspaceHost {
  * execution environment variables, then verifies the directory as the worker sees it.
  * @throws PrepareFailed with the command's output when the prepare command fails.
  */
-export async function prepareWorkspace(ticket: Ticket, host: WorkspaceHost): Promise<void> {
+export async function prepareWorkspace(ticket: Ticket, host: WorkspaceDeps): Promise<void> {
   const directory = ticket.execution?.directory ?? ''
   await mkdir(dirname(directory), { recursive: true })
   const command = host.store.settings().executor.prepare.trim()

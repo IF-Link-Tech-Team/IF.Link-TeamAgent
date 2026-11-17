@@ -10,7 +10,7 @@ import type { Store } from '../store.ts'
 import { attribute, markdown, plain, preview, readable } from './text.ts'
 
 export type LinkTarget = (channel: ChannelRef) => ChannelLink
-export interface ViewHost { store: Store; sources: SourceRegistry; links: LinkTarget }
+export interface ViewDeps { store: Store; sources: SourceRegistry; links: LinkTarget }
 export const page = <T>(items: T[], offset: number, limit: number) => ({ items: items.slice(offset, offset + limit), total: items.length, next_offset: offset + limit < items.length ? offset + limit : null })
 const DAY = 86_400_000
 export const dayAgo = () => new Date(Date.now() - DAY).toISOString()
@@ -34,7 +34,7 @@ export function ownersOf(store: Pick<Store, 'tickets' | 'threads' | 'triggers'>)
   return trigger => followupOwners(trigger, records)
 }
 /** One request's reads, each read once: the Threads each Ticket subscribes to, the rules by id, and the senders' names. */
-export interface Snapshot extends ViewHost {
+export interface Snapshot extends ViewDeps {
   threadsOf(ticketId: string): Thread[]
   /** Current rule name, falling back to `id` once a rule has been removed. */
   rule(id: string): { id: string; name: string }
@@ -43,7 +43,7 @@ export interface Snapshot extends ViewHost {
   /** The owners of follow-ups (see `ownersOf`). */
   owners: Owners
 }
-export function snapshot(host: ViewHost): Snapshot {
+export function snapshot(host: ViewDeps): Snapshot {
   const { store, sources } = host
   let subscribed: Map<string, Thread[]> | undefined
   const threadsOf = (ticketId: string) => {
@@ -177,7 +177,7 @@ export function threadSummary(view: Snapshot, thread: Thread) {
 }
 export type ThreadSummaryView = ReturnType<typeof threadSummary>
 /** Resolves a channel link, preferring the specific trigger URL when the source link references a trigger. */
-export function channelLink({ store, links }: ViewHost, channel: ChannelRef) {
+export function channelLink({ store, links }: ViewDeps, channel: ChannelRef) {
   const { url, label, triggerId } = links(channel)
   return { source: channel.source, url: (triggerId && store.triggers.get(triggerId)?.url) || url, label }
 }

@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import type { Ticket, Trigger } from '../src/core/index.ts'
-import { SchedulerConfigSchema, tickScheduler, type SchedulerHost } from '../src/sources/scheduler.ts'
+import { SchedulerConfigSchema, tickScheduler, type SchedulerDeps } from '../src/sources/scheduler.ts'
 
 const HOUR = 3_600_000
 /** 10:00 in Shanghai; a daily job at 09:30 is therefore already due today. */
@@ -16,12 +16,12 @@ const ticket = (overrides: Partial<Ticket> = {}): Ticket => ({ id: 't', title: '
   origin: { triggerId: 'x', triggerIds: ['x'] }, ...overrides })
 
 /** A Source context with only what a tick reads, plus the triggers it produced. */
-function host(overrides: Partial<SchedulerHost> = {}, options: { config?: unknown; memoryDir?: string } = {}) {
+function host(overrides: Partial<SchedulerDeps> = {}, options: { config?: unknown; memoryDir?: string } = {}) {
   const received: Trigger[] = []
   const store = new Map<string, unknown>()
   const memoryDir = options.memoryDir ?? mkdtempSync(join(tmpdir(), 'scheduler-tick-'))
   const config = SchedulerConfigSchema.parse(options.config ?? {})
-  const value: SchedulerHost = {
+  const value: SchedulerDeps = {
     config: <C extends Record<string, unknown>>() => config as unknown as C,
     receive: trigger => { received.push(trigger); return 'stored' },
     state: { get: <V,>(key: string) => store.get(key) as V | undefined,

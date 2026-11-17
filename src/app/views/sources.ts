@@ -5,7 +5,7 @@ import type { Health } from '../../sources/host.ts'
 import type { SourceInstance } from '../../sources/kind.ts'
 import type { SourceRegistry } from '../../sources/registry.ts'
 import type { SetupProblem } from '../../setup.ts'
-import { dayAgo, snapshot, type ViewHost } from './records.ts'
+import { dayAgo, snapshot, type ViewDeps } from './records.ts'
 import { preview } from './text.ts'
 
 export type HealthMap = Record<string, Health>
@@ -38,7 +38,7 @@ function sourceState(instance: SourceInstance & { installed: boolean }, parts: {
   if (parts.some(part => part.state === 'starting')) return 'starting'
   return parts.some(part => part.state === 'paused') ? 'paused' : 'ready'
 }
-export function sourcesStatus(host: ViewHost, health: HealthMap, setup: SetupState) {
+export function sourcesStatus(host: ViewDeps, health: HealthMap, setup: SetupState) {
   const { store, sources } = host
   const view = snapshot(host)
   const since = dayAgo()
@@ -57,7 +57,7 @@ export function sourcesStatus(host: ViewHost, health: HealthMap, setup: SetupSta
 }
 export type SourceStatusView = ReturnType<typeof sourcesStatus>[number]
 /** Replies dropped in the last 24 hours, enriched with their associated ticket and thread. */
-export function droppedReplies({ store, links }: Pick<ViewHost, 'store' | 'links'>) {
+export function droppedReplies({ store, links }: Pick<ViewDeps, 'store' | 'links'>) {
   // Fetch the exact 24-hour dropped count so this list's length matches the overview's `dropped` metric.
   return store.read.droppedReplies(store.read.droppedSince(dayAgo())).map(item => {
     const ticket = item.ticketId ? store.tickets.get(item.ticketId) : undefined

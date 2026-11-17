@@ -8,7 +8,7 @@ import type { Store } from './store.ts'
 
 /** The Cloudflare Workers AI account and token the pick needs; without both the pick is skipped and a Channel keeps its own mark. */
 export interface MarkAccount { account: string; token: string }
-export interface MarkPickerHost {
+export interface MarkPickerDeps {
   readonly store: Pick<Store, 'triggers' | 'tickets' | 'decisions' | 'read'>
   readonly health: HealthEntry
 }
@@ -54,7 +54,7 @@ const TEXT_CHARS = 600, TITLE_CHARS = 120, SCOPE_CHARS = 300, HISTORY = 5, HISTO
  * a failed call or an answer the Channel cannot draw leaves the Channel its own mark, so the mark never waits on the model.
  */
 export class MarkPicker implements MarkChooser {
-  constructor(private readonly host: MarkPickerHost, private readonly options: MarkAccount & {
+  constructor(private readonly host: MarkPickerDeps, private readonly options: MarkAccount & {
     model?: string; timeoutMs?: number; fetch?: typeof globalThis.fetch
   }) {}
   /** Whether the pick can run: both the account and its token are configured. */

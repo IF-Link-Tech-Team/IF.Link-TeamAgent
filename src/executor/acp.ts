@@ -41,7 +41,7 @@ const RUNTIME_CONTRACT = [
 ].join('\n')
 
 /** What `AcpExecutor` needs from the Runtime. */
-export interface AcpExecutorHost {
+export interface AcpExecutorDeps {
   readonly context: Pick<Context, 'subprocess'>
   readonly engine: Pick<EngineForExecutor, 'assignmentStarted' | 'inputsDelivered' | 'inputsRead' | 'turnEnded' | 'deliveryFailed' | 'report'
     | 'assignmentInterrupted'>
@@ -148,7 +148,7 @@ export async function writeMcpConfig(profile: Pick<RuntimeProfile, 'mcpConfigPat
 export class AcpExecutor {
   private readonly runs = new Map<string, AcpRun>()
 
-  constructor(private readonly host: AcpExecutorHost) {}
+  constructor(private readonly host: AcpExecutorDeps) {}
 
   /** Runs a queued launch: prepare the workspace, start the runtime, and hand it the assignment. */
   async launchNow({ ticketId, assignmentId }: { ticketId: string; assignmentId: string }): Promise<void> {

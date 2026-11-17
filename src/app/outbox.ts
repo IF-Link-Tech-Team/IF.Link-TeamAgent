@@ -7,7 +7,7 @@ import type { SourceRegistry } from '../sources/registry.ts'
 import { FAILURES_BEFORE_ERROR, Later, type Effects } from './effects.ts'
 import type { Store } from './store.ts'
 
-export interface OutboxHost {
+export interface OutboxDeps {
   readonly store: Pick<Store, 'atomic' | 'receipts'>
   readonly effects: Pick<Effects, 'enqueue' | 'cancel' | 'handle' | 'idle'>
   readonly sources: Pick<SourceRegistry, 'instance' | 'channelAllowed' | 'send'>
@@ -23,7 +23,7 @@ export interface OutboxHost {
  * Messages wait while processing is paused or their source is unavailable, and settle as dropped when the target conversation is ignored or gone.
  */
 export class Outbox implements OutboxPort {
-  constructor(private readonly host: OutboxHost) {
+  constructor(private readonly host: OutboxDeps) {
     host.effects.handle('reply', (_payload, id) => this.deliver(id), { limit: () => host.paused() ? 0 : 1, retry: [5000, 300_000] })
   }
   /** Record a message receipt and enqueue its delivery effect atomically; duplicate message IDs are ignored. */

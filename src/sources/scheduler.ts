@@ -230,7 +230,7 @@ export const schedulerKind: SourceKind<SchedulerConfig> = {
  * The part of a Source context one tick needs. Narrow on purpose: a tick cannot read a Session or send to a channel, so
  * the test below can drive the whole schedule with a plain object.
  */
-export interface SchedulerHost {
+export interface SchedulerDeps {
   config<C extends Record<string, unknown>>(kind: string): C | undefined
   receive(trigger: Trigger): ReceiveResult | Promise<ReceiveResult>
   state: { get<V>(key: Key<V>): V | undefined; set<V>(key: Key<V>, value: V | undefined): void }
@@ -241,7 +241,7 @@ export interface SchedulerHost {
 }
 
 /** One occurrence of each due job, at most once per window. */
-async function runJobs(ctx: SchedulerHost, now: number, current: SchedulerConfig, lines: string[]): Promise<void> {
+async function runJobs(ctx: SchedulerDeps, now: number, current: SchedulerConfig, lines: string[]): Promise<void> {
   for (const job of current.jobs) {
     if (!job.enabled) continue
     if (!job.chatId) { lines.push(`${job.id}: 未配置 chatId，跳过`); continue }
@@ -270,7 +270,7 @@ async function runJobs(ctx: SchedulerHost, now: number, current: SchedulerConfig
 }
 
 /** The heartbeat: look, decide whether the look is worth a model call, and address it only when it is. */
-async function runHeartbeat(ctx: SchedulerHost, now: number, current: SchedulerConfig, lines: string[]): Promise<void> {
+async function runHeartbeat(ctx: SchedulerDeps, now: number, current: SchedulerConfig, lines: string[]): Promise<void> {
   const { heartbeat } = current
   if (!heartbeat.enabled) return
   if (!heartbeat.chatId) { lines.push('心跳: 未配置 chatId，跳过'); return }
@@ -313,7 +313,7 @@ async function runHeartbeat(ctx: SchedulerHost, now: number, current: SchedulerC
 }
 
 /** One pass of the clock: every due job and the heartbeat, and the lines a person reads in health. */
-export async function tickScheduler(ctx: SchedulerHost, now: number): Promise<string[]> {
+export async function tickScheduler(ctx: SchedulerDeps, now: number): Promise<string[]> {
   const current = ctx.config<SchedulerConfig>(SOURCE)
   if (!current) return []
   const lines: string[] = []

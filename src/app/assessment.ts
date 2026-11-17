@@ -53,7 +53,7 @@ interface EvalReads { cache: ReadCache; context?: AssessmentContext; error?: str
 /** Message returned when assessing a Trigger whose Source provides no thread context. */
 const NO_CONTEXT = 'This Source gives no Thread context; assess the Trigger\'s own text and the batch.'
 /** Host dependencies used by `MainAssessor`. */
-export interface AssessorHost {
+export interface AssessorDeps {
   /** Active evaluations in `Engine` that the assessor reads and decides. */
   readonly engine: Pick<EngineForMainSession, 'candidate' | 'candidateDelivered' | 'decide'>
   readonly commands: Commands
@@ -91,14 +91,14 @@ export type EvalRead = z.infer<typeof EvalReadSchema>
 /**
  * Implements the `Engine` `Assessor` port for proactive candidate evaluation in the main Session.
  * Relays each evaluation's candidate card to the main Session through the durable `assessment` effect, serves bounded `TriggerContext` and repository reads while the evaluation runs, and converts the main Session's assessment into an `AssessmentOutcome` for `Engine.decide`.
- * Depends on `SourceRegistry` (via `AssessorHost`) for source-specific thread context and on `Sessions` for deduplicated candidate delivery; the main Session's `orchestrator_eval*` tools call `context`, `read`, and `decide`.
+ * Depends on `SourceRegistry` (via `AssessorDeps`) for source-specific thread context and on `Sessions` for deduplicated candidate delivery; the main Session's `orchestrator_eval*` tools call `context`, `read`, and `decide`.
  */
 export class MainAssessor implements Assessor {
   /** Per-evaluation read caches and thread contexts, keyed by `evalId`. */
   private readonly evals = new Map<string, EvalReads>()
   private readonly controller = new AbortController()
   /** Registers the handler that relays each Eval's candidate card, which a link lookup may delay for seconds. */
-  constructor(private readonly host: AssessorHost) {
+  constructor(private readonly host: AssessorDeps) {
     // Start the evaluation deadline only after the main Session receives the candidate card, so a busy Session does not consume evaluation time.
     host.effects.handle('assessment', async ({ triggerId }, evalId) => {
       const candidate = this.host.engine.candidate(triggerId)

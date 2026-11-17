@@ -3,10 +3,10 @@ import { mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { readResource, resourceGrammar, type ResourceHost } from '../src/app/resources.ts'
+import { readResource, resourceGrammar, type ResourceDeps } from '../src/app/resources.ts'
 import { copyMemory } from '../src/executor/dsh.ts'
 
-const host = (memoryDir: string) => ({ memoryDir, mainSessionId: 'orchestrator', settings: {} } as unknown as ResourceHost)
+const host = (memoryDir: string) => ({ memoryDir, mainSessionId: 'orchestrator', settings: {} } as unknown as ResourceDeps)
 const project = () => mkdtempSync(join(tmpdir(), 'memory-'))
 
 describe('memory resources', () => {
