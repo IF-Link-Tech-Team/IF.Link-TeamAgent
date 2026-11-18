@@ -104,8 +104,8 @@ export type AdmissionCell = 'listedUnaddressed' | 'unlistedAddressed' | 'unliste
  * (`would_accept`) without accepting (`observe`), or not admitted (`off`).
  */
 export type AcceptMode = 'off' | 'observe' | 'auto'
-/** Where a Mandate's Trigger was received: its Source, its receiving scope as the Source recorded it, and its admission row. */
-interface Received { source?: string; scope?: Record<string, unknown>; row?: string }
+/** Where a Mandate's Trigger was received: its Source, the receiving scope's metadata as the Source recorded it, and its admission row. */
+interface Received { source?: string; meta?: Record<string, unknown>; row?: string }
 /**
  * How the gate admitted the Trigger a Mandate came from, which `revalidate` re-checks (see `docs/002`):
  * - `addressed`: a sender on the Source's list addressed the agent;
@@ -132,7 +132,8 @@ export interface Mandate {
   /** How the gate admitted it, for re-validation and audit. */
   basis: MandateBasis
   actor: ActorRef
-  scope: string
+  /** What the accepted work covers, in the assessment's own words; not a permission scope. */
+  workScope: string
 }
 
 /** Active trigger evaluation on a thread; at most one exists per thread. */
@@ -334,7 +335,8 @@ export interface Ticket {
  */
 export interface Follow { thread: string; own: boolean; closed?: { at: string; outcome: 'merged' | 'closed' } }
 export interface Execution {
-  name: string
+  /** The ticket's short directory name, derived from the assessment's `worktree_name`; not a person or a model name. */
+  shortName: string
   directory: string
   assignment: string
   /** Task type and difficulty chosen at accept time, kept for the panel and for a later re-route. */

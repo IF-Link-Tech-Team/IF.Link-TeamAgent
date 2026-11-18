@@ -52,7 +52,7 @@ describe('source scope', () => {
 })
 describe('gate', () => {
   it('grants explicit strength when the sender is allowed in its Source\'s part and the Source marked the Trigger addressed', () => {
-    expect(policy.gate(feishu(), thread(), [])).toMatchObject({ admissible: true, strength: 'explicit', basis: { via: 'addressed', source: 'feishu', sender: 'Alice', addressed: 'mention', scope: { chatId: CHAT } } })
+    expect(policy.gate(feishu(), thread(), [])).toMatchObject({ admissible: true, strength: 'explicit', basis: { via: 'addressed', source: 'feishu', sender: 'Alice', addressed: 'mention', meta: { chatId: CHAT } } })
     expect(policy.gate(feishu({ addressed: 'direct', meta: { chatId: 'p2p', direct: true, mentioned: false } }), thread(), [])).toMatchObject({ admissible: true, strength: 'explicit', basis: { addressed: 'direct' } })
     // GitHub logins compare without case; the entry's id names the sender when it has no display name.
     expect(policy.gate(github('alice', 'mention'), thread(), [])).toMatchObject({ admissible: true, strength: 'explicit', basis: { source: 'github', sender: 'Alice' } })
@@ -108,7 +108,7 @@ describe('admission table', () => {
   })
   it('makes an unlisted sender\'s mention explicit or inferred as the row says, and an inferred one waits for a mode that assesses', () => {
     const explicit = setup(withTable({ [CHAT]: { unlistedAddressed: 'explicit' } })).policy.gate(inChat(CHAT, STRANGER), thread(), [])
-    expect(explicit).toEqual({ admissible: true, strength: 'explicit', basis: { source: 'feishu', scope: { chatId: CHAT, direct: false, mentioned: true }, row: CHAT, via: 'admission', cell: 'unlistedAddressed', addressed: 'mention' } })
+    expect(explicit).toEqual({ admissible: true, strength: 'explicit', basis: { source: 'feishu', meta: { chatId: CHAT, direct: false, mentioned: true }, row: CHAT, via: 'admission', cell: 'unlistedAddressed', addressed: 'mention' } })
     expect(setup(withTable({ [CHAT]: { unlistedAddressed: 'inferred' } })).policy.gate(inChat(CHAT, STRANGER), thread(), [])).toMatchObject({ admissible: true, strength: 'inferred', basis: { cell: 'unlistedAddressed' } })
     expect(setup(withTable({ [CHAT]: { unlistedAddressed: 'inferred' } }, {}, 'off')).policy.gate(inChat(CHAT, STRANGER), thread(), [])).toEqual({ admissible: false, reason: 'not_a_member' })
     expect(setup(withTable({ direct: { unlistedAddressed: 'explicit' } })).policy.gate(feishu({ actor: { source: 'feishu', id: STRANGER }, addressed: 'direct', meta: { chatId: 'p2p', direct: true, mentioned: false } }), thread(), [])).toMatchObject({ admissible: true, strength: 'explicit', basis: { row: 'direct', cell: 'unlistedAddressed' } })
@@ -154,7 +154,7 @@ describe('admission table', () => {
     const open = withTable({ [CHAT]: { unlistedAddressed: 'explicit' } })
     const gate = setup(open).policy.gate(inChat(CHAT, STRANGER), thread(), [])
     if (!gate.admissible) throw new Error('expected admission')
-    const mandate = { strength: gate.strength, policyVersion: 'v', basis: gate.basis, actor: { source: 'feishu', id: STRANGER }, scope: '' }
+    const mandate = { strength: gate.strength, policyVersion: 'v', basis: gate.basis, actor: { source: 'feishu', id: STRANGER }, workScope: '' }
     expect(setup(open).policy.revalidate(mandate)).toBe(true)
     expect(setup(withTable({ [CHAT]: { unlistedAddressed: 'inferred' } })).policy.revalidate(mandate)).toBe(false)
     expect(setup(withTable({})).policy.revalidate(mandate)).toBe(false)
@@ -196,23 +196,23 @@ describe('revalidating a Mandate from the admission table', () => {
     })
     const addressed = item.cell === 'unlistedAddressed'
     const observed = item.strength === 'inferred' ? { observation: { mode: 'auto' as const }, rules: ['copy'] } : {}
-    const basis: MandateBasis = { via: 'admission', source: 'feishu', scope: { chatId: CHAT, direct: false, mentioned: addressed }, row: CHAT, cell: item.cell,
+    const basis: MandateBasis = { via: 'admission', source: 'feishu', meta: { chatId: CHAT, direct: false, mentioned: addressed }, row: CHAT, cell: item.cell,
       ...addressed ? { addressed: 'mention' as const } : {}, ...observed }
-    const mandate = { strength: item.strength, policyVersion: 'v', basis, actor: { source: 'feishu', id: SENDER }, scope: '' }
+    const mandate = { strength: item.strength, policyVersion: 'v', basis, actor: { source: 'feishu', id: SENDER }, workScope: '' }
     expect(setup(settings).policy.revalidate(mandate)).toBe(expected(item))
   })
 })
 describe('revalidate and version', () => {
   it('keeps explicit Mandates while the sender stays allowed and the Source still listens, and rule Mandates only while auto mode and the rules hold', () => {
-    const basis: MandateBasis = { via: 'addressed', source: 'feishu', scope: { chatId: CHAT, direct: false }, sender: 'Alice', addressed: 'mention' }
-    const mandate = { strength: 'explicit' as const, policyVersion: 'v', basis, actor: { source: 'feishu', id: MEMBER }, scope: '' }
+    const basis: MandateBasis = { via: 'addressed', source: 'feishu', meta: { chatId: CHAT, direct: false }, sender: 'Alice', addressed: 'mention' }
+    const mandate = { strength: 'explicit' as const, policyVersion: 'v', basis, actor: { source: 'feishu', id: MEMBER }, workScope: '' }
     expect(policy.revalidate(mandate)).toBe(true)
     const nobody = { ...base, policy: { ...base.policy, sources: {} } }
     expect(setup(nobody).policy.revalidate(mandate)).toBe(false)
     const silent = { ...base, sources: { feishu: feishuSource({ chats: [], directMessages: true }) } }
     expect(setup(silent).policy.revalidate(mandate)).toBe(false)
     // A Mandate from before the gate recorded how it admitted a Trigger holds while its sender is listed and the Source listens.
-    const listed: MandateBasis = { via: 'listed', source: 'feishu', scope: { chatId: CHAT, direct: false }, sender: 'Alice' }
+    const listed: MandateBasis = { via: 'listed', source: 'feishu', meta: { chatId: CHAT, direct: false }, sender: 'Alice' }
     expect(setup(silent).policy.revalidate({ ...mandate, basis: listed })).toBe(false)
     expect(policy.revalidate({ ...mandate, basis: listed })).toBe(true)
     const inferred = { ...mandate, strength: 'inferred' as const, basis: { via: 'listed', observation: {}, rules: ['copy'] } satisfies MandateBasis }
@@ -385,8 +385,8 @@ describe('policy effects', () => {
     expect(policyEffects([bot], listed, base, scope).get('t4')).toEqual({ requesterAllowed: false, requester: { source: 'feishu', id: 'cli_ci_bot' } })
   })
   it('keeps an inferred follow-up\'s Mandate only while candidates become work and its rules are on, as any inferred one', () => {
-    const followup = ticket('t5', { strength: 'inferred', actor: { source: 'feishu', id: 'ou_guest' }, scope: '',
-      basis: { via: 'followup', source: 'feishu', scope: { chatId: 'oc_team' }, rules: ['copy'] } })
+    const followup = ticket('t5', { strength: 'inferred', actor: { source: 'feishu', id: 'ou_guest' }, workScope: '',
+      basis: { via: 'followup', source: 'feishu', meta: { chatId: 'oc_team' }, rules: ['copy'] } })
     const mode = (value: 'auto' | 'observe' | 'off') => ({ ...base, eval: { ...base.eval, mode: value } })
     const disabled = { ...mode('auto'), policy: { ...base.policy, rules: base.policy.rules.map(rule => ({ ...rule, enabled: rule.id !== 'copy' })) } }
     expect(settingsPolicy(mode('auto'), scope()).revalidate(followup.mandate)).toBe(true)
@@ -401,8 +401,8 @@ describe('policy effects', () => {
     const table = (cell: 'inferred' | 'ignore', mode: 'auto' | 'observe' = 'auto') => SettingsSchema.parse({ ...base, eval: { ...base.eval, mode },
       policy: { ...base.policy, sources: { feishu: { ...base.policy.sources.feishu!, admission: { [chat]: { unlistedUnaddressed: cell } } } } } })
     const observed = () => ({ scope: () => ({ listened: true as const, observed: true, row: chat }) })
-    const proactive = ticket('t3', { strength: 'inferred', actor: { source: 'feishu', id: 'ou_guest' }, scope: '',
-      basis: { via: 'admission', cell: 'unlistedUnaddressed', source: 'feishu', scope: { chatId: chat }, row: chat, rules: ['copy'],
+    const proactive = ticket('t3', { strength: 'inferred', actor: { source: 'feishu', id: 'ou_guest' }, workScope: '',
+      basis: { via: 'admission', cell: 'unlistedUnaddressed', source: 'feishu', meta: { chatId: chat }, row: chat, rules: ['copy'],
         observation: { mode: 'auto' } } })
     expect(policyEffects([proactive], table('inferred'), table('inferred'), observed).size).toBe(0)
     // A weaker cell takes the work from its sender, whom the effect names; a mode change only stops inferred work.
@@ -440,7 +440,7 @@ describe('bots and events without a sender', () => {
   })
   it('keeps a bot candidate\'s Mandate while the bot stays on its list and candidates may become work', () => {
     const settings = observing({ observeComments: true })
-    const mandate = { strength: 'inferred' as const, policyVersion: '', actor: comment.actor, scope: '',
+    const mandate = { strength: 'inferred' as const, policyVersion: '', actor: comment.actor, workScope: '',
       basis: { via: 'bot' as const, source: 'github', scope: comment.meta, row: 'comments', sender: 'dependabot[bot]',
         observation: { mode: 'auto' as const } } }
     expect(setup(settings).policy.revalidate(mandate)).toBe(true)

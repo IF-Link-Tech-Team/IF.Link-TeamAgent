@@ -35,7 +35,7 @@ function schema10(path: string, records: Record<string, unknown>, rows: { ticket
   db.close()
 }
 const actor = { source: 'feishu', id: 'ou_alice' }
-const mandate = (basis: object) => ({ strength: 'explicit', policyVersion: 'v1', basis, actor, scope: 'small' })
+const mandate = (basis: object) => ({ strength: 'explicit', policyVersion: 'v1', basis, actor, workScope: 'small' })
 
 it('refuses a database older than schema 10 and asks for a new state directory', () => {
   const path = join(directory, 'db.sqlite')
@@ -123,19 +123,19 @@ it('writes a schema 10 database in its current shape once, so nothing reads an o
   expect(store.keys('problem-dismissed:')).toEqual([])
   expect(migrated).toMatchObject({
     origin: { triggerId: 'trig-1', triggerIds: ['trig-1', 'trig-2'] },
-    execution: { name: 'fix-1', directory: '/w/fix-1', assignment: 'Read trigger/trig-1.' },
+    execution: { shortName: 'fix-1', directory: '/w/fix-1', assignment: 'Read trigger/trig-1.' },
     delivery: { error: 'offline', at: '2' },
     follows: [{ thread: 'github:8', own: true, closed: { at: '2026-09-01T00:00:00Z', outcome: 'merged' } }, { thread: 'github:7', own: false }],
     channels: [{ source: 'github', thread: 'github:7', address: { number: '7', url: 'https://github.com/acme/widgets/pull/7#issuecomment-1' } }],
     answers: ['trig-3'],
-    mandate: { basis: { via: 'listed', source: 'feishu', scope: { chatId: 'oc_team', direct: false }, sender: 'ou_alice', addressed: 'mention' } },
+    mandate: { basis: { via: 'listed', source: 'feishu', meta: { chatId: 'oc_team', direct: false }, sender: 'ou_alice', addressed: 'mention' } },
   })
   expect(migrated.inputs[0]).toMatchObject({ id: 'i1', kind: 'text', text: expect.stringContaining('"resumed":true') })
   expect(migrated.inputs[0]).not.toMatchObject({ text: expect.stringContaining('reopen') })
   expect(migrated.inputs[1]).toEqual({ id: 'i2', kind: 'reopen', decisionId: 'd0', at: '0' })
   expect(migrated.inputs.slice(2)).toEqual([{ id: 'i3', kind: 'trigger', triggerId: 'trig-2', at: '4', human: true }, { id: 'i4', kind: 'trigger', triggerId: 'ci-1', at: '5' }])
   expect(migrated).not.toHaveProperty('execution.recoveries')
-  expect(store.tickets.get('t2')).toMatchObject({ execution: { name: 'task-2', assignment: 'Read event/old' },
+  expect(store.tickets.get('t2')).toMatchObject({ execution: { shortName: 'task-2', assignment: 'Read event/old' },
     mandate: { basis: { via: 'followup', authority: 'thread_followup' } } })
   expect(store.tickets.get('t2')).not.toHaveProperty('follows')
   // An end's reason that only repeats its outcome is not kept.
@@ -143,13 +143,13 @@ it('writes a schema 10 database in its current shape once, so nothing reads an o
   // A ticket a person stopped keeps nothing waiting; a ticket stored without its attributes gets an origin all the same.
   expect(store.tickets.get('t4')).toMatchObject({ origin: { triggerId: '', triggerIds: [] } })
   expect(store.tickets.get('t3')).toMatchObject({ ended: { outcome: 'stopped' }, undelivered: [], origin: { triggerId: '', triggerIds: [] },
-    mandate: { basis: { via: 'listed', source: 'feishu', scope: { chatId: 'p2p', direct: true }, sender: 'ou_alice', addressed: 'direct' } } })
+    mandate: { basis: { via: 'listed', source: 'feishu', meta: { chatId: 'p2p', direct: true }, sender: 'ou_alice', addressed: 'direct' } } })
   expect(store.tickets.get('t3')).not.toHaveProperty('execution')
   // A reason is a code; words the assessor wrote stay as written.
   expect(store.decisions.get('d2')).toEqual({ ...reopened, reason: [{ code: 'said', values: { text: 'follow-up' } }] })
   expect(store.decisions.get('d3')!.reason).toEqual([{ code: 'timeout' }])
   expect(store.decisions.get('d1')!.mandate!.basis).toEqual({ via: 'listed', rules: ['copy'], observation: {}, authority: 'proactive_rule' })
-  expect(store.threads.get('github:5')!.evaluating!.basis).toEqual({ via: 'admission', source: 'github', scope: { number: 5 }, row: 'issues',
+  expect(store.threads.get('github:5')!.evaluating!.basis).toEqual({ via: 'admission', source: 'github', meta: { number: 5 }, row: 'issues',
     cell: 'listedUnaddressed', observation: { mode: 'auto' } })
   // kv: an Input is rendered from its ticket as it is read, so no body stays; records nothing reads go, and so do the
   // removed Issue Source's, which the migration converted.
@@ -202,24 +202,61 @@ it('changes nothing when one step fails: the database stays at schema 10 as it w
     updatedAt: '2', mandate: mandate({ via: 'listed' }), meta: { sourceTriggerId: 'trig-1', workspace: '/w/fix-1' } }
   // The current settings must validate; an invalid value aborts the migration transaction.
   schema10(path, { settings: { executor: { maxWorkers: 'many' } } }, { ticket: [ticket] })
-  expect(() => new Store(path)).toThrow(/^The orchestrator database is unchanged at schema 10: its migration to schema 11 failed: the settings: /)
+  expect(() => new Store(path)).toThrow(/^The orchestrator database is unchanged at schema 10: its migration to schema 12 failed: the settings: /)
   const db = new DatabaseSync(path)
   expect(db.prepare("SELECT value FROM kv WHERE key='schema'").get()).toEqual({ value: '10' })
   expect(JSON.parse(String(db.prepare("SELECT value FROM ticket WHERE id='t1'").get()!.value))).toMatchObject({ meta: { workspace: '/w/fix-1' } })
   db.close()
 })
 
+it('renames a schema 11 record\'s work scope, receiving metadata, short name and Eval delivery in place', () => {
+  const path = join(directory, 'db.sqlite')
+  // A schema 11 database as that build wrote it: a Mandate's `scope`, a basis `scope`, an Execution `name`, and an Eval
+  // whose candidate had `delivered`. Golden values, so a later rename cannot quietly drop one of them.
+  const basis = { via: 'addressed', source: 'feishu', scope: { chatId: 'oc_team', direct: false }, sender: 'Alice', addressed: 'mention' }
+  const mandate11 = { strength: 'explicit', policyVersion: 'v1', basis, actor, scope: '修复登录页回归' }
+  const ticket11 = { id: 't1', title: 'Fix', decisionId: 'd1', channels: [], assignments: [], inputs: [], undelivered: [], createdAt: '1', updatedAt: '2',
+    mandate: mandate11, execution: { name: 'fix-login-abc123', directory: '/w/fix-login-abc123', assignment: 'Do it.' },
+    origin: { triggerId: 'trig-1', triggerIds: ['trig-1'] } }
+  const decision11 = { id: 'd1', threadKey: 'feishu:oc_team:om_1', triggerIds: ['trig-1'], kind: 'accept', at: '1', ticketId: 't1',
+    policyVersion: 'v1', mandate: mandate11, reason: [{ code: 'said', values: { text: 'Fix the login page' } }] }
+  const evaluating11 = { id: 'e1', threadKey: 'feishu:oc_team:om_1', triggerIds: ['trig-1'], strength: 'explicit', actor, policyVersion: 'v1',
+    startedAt: '1', delivered: '2', deadline: '99', basis }
+  const thread11 = { key: 'feishu:oc_team:om_1', ref: { source: 'feishu', id: 'oc_team:om_1' }, createdAt: '1', subscriptions: [], correlated: [],
+    pending: [], evaluating: evaluating11, meta: {} }
+  new Store(path).close()
+  const seed = new DatabaseSync(path)
+  seed.prepare('INSERT INTO ticket VALUES (?,?)').run('t1', JSON.stringify(ticket11))
+  seed.prepare('INSERT INTO decision VALUES (?,?,?)').run('d1', 'feishu:oc_team:om_1', JSON.stringify(decision11))
+  seed.prepare('INSERT INTO thread VALUES (?,?)').run('feishu:oc_team:om_1', JSON.stringify(thread11))
+  seed.prepare("UPDATE kv SET value='11' WHERE key='schema'").run()
+  seed.close()
+
+  const store = new Store(path)
+  expect(store.get(KV.store.schema)).toBe(SCHEMA_VERSION)
+  const ticket = store.tickets.get('t1')!
+  expect(ticket.mandate).toEqual({ strength: 'explicit', policyVersion: 'v1', actor, workScope: '修复登录页回归',
+    basis: { via: 'addressed', source: 'feishu', meta: { chatId: 'oc_team', direct: false }, sender: 'Alice', addressed: 'mention' } })
+  expect(ticket.mandate).not.toHaveProperty('scope')
+  expect(ticket.execution).toEqual({ shortName: 'fix-login-abc123', directory: '/w/fix-login-abc123', assignment: 'Do it.' })
+  expect(store.decisions.get('d1')!.mandate).toEqual(ticket.mandate)
+  expect(store.threads.get('feishu:oc_team:om_1')!.evaluating).toEqual({ id: 'e1', threadKey: 'feishu:oc_team:om_1', triggerIds: ['trig-1'],
+    strength: 'explicit', actor, policyVersion: 'v1', startedAt: '1', candidateReached: '2', deadline: '99',
+    basis: { via: 'addressed', source: 'feishu', meta: { chatId: 'oc_team', direct: false }, sender: 'Alice', addressed: 'mention' } })
+  store.close()
+})
+
 it('reads every basis an earlier gate recorded in the current shape', () => {
   const scope = { chatId: 'oc_1', direct: false }
-  expect(basisOf({ source: 'feishu', scope, row: 'oc_1', sender: 'Alice', addressed: 'mention' })).toEqual({ via: 'addressed', source: 'feishu', scope, row: 'oc_1',
+  expect(basisOf({ source: 'feishu', scope, row: 'oc_1', sender: 'Alice', addressed: 'mention' })).toEqual({ via: 'addressed', source: 'feishu', meta: scope, row: 'oc_1',
     sender: 'Alice', addressed: 'mention' })
-  expect(basisOf({ source: 'feishu', scope, followup: true, rules: ['r'] })).toEqual({ via: 'followup', source: 'feishu', scope, rules: ['r'] })
-  expect(basisOf({ source: 'feishu', scope, addressed: 'direct', admission: 'unlistedAddressed' })).toEqual({ via: 'admission', source: 'feishu', scope,
+  expect(basisOf({ source: 'feishu', scope, followup: true, rules: ['r'] })).toEqual({ via: 'followup', source: 'feishu', meta: scope, rules: ['r'] })
+  expect(basisOf({ source: 'feishu', scope, addressed: 'direct', admission: 'unlistedAddressed' })).toEqual({ via: 'admission', source: 'feishu', meta: scope,
     cell: 'unlistedAddressed', addressed: 'direct' })
   // Observed under an earlier gate that recorded no cell: the sender had to be on the list.
-  expect(basisOf({ source: 'feishu', scope, sender: 'Alice', observation: true, mode: 'auto', rules: ['r'] })).toEqual({ via: 'listed', source: 'feishu', scope,
+  expect(basisOf({ source: 'feishu', scope, sender: 'Alice', observation: true, mode: 'auto', rules: ['r'] })).toEqual({ via: 'listed', source: 'feishu', meta: scope,
     sender: 'Alice', rules: ['r'], observation: { mode: 'auto' } })
-  expect(basisOf({ chatId: 'oc_1', direct: true, followup: true, member: 'ou_a' })).toEqual({ via: 'followup', source: 'feishu', scope: { chatId: 'oc_1', direct: true },
+  expect(basisOf({ chatId: 'oc_1', direct: true, followup: true, member: 'ou_a' })).toEqual({ via: 'followup', source: 'feishu', meta: { chatId: 'oc_1', direct: true },
     sender: 'ou_a' })
   expect(basisOf({ member: 'ou_a', mention: true })).toEqual({ via: 'listed', sender: 'ou_a', addressed: 'mention' })
   expect(basisOf({ legacyAuthority: 'explicit_mention' })).toEqual({ via: 'listed', authority: 'explicit_mention' })
@@ -354,7 +391,7 @@ it('opens a database the last schema 10 build left, adds what this version keeps
   expect(store.get(KV.store.schema)).toBe(SCHEMA_VERSION)
   expect(store.tickets.active().map(ticket => ticket.id)).toEqual(['t1'])
   expect(store.read.subscribedThreads('feishu').map(thread => thread.key)).toEqual(['feishu:oc_team:om_1'])
-  expect(store.tickets.get('t1')).toMatchObject({ origin: { triggerId: 'trig-1' }, execution: { name: 'fix-1', directory: '/w/fix-1' },
+  expect(store.tickets.get('t1')).toMatchObject({ origin: { triggerId: 'trig-1' }, execution: { shortName: 'fix-1', directory: '/w/fix-1' },
     mandate: { basis: { via: 'addressed', addressed: 'mention' } } })
   expect(store.receipts.waiting().map(item => item.id)).toEqual(['reply-1'])
   expect(store.db.prepare('SELECT kind, key, generation FROM effect ORDER BY seq').all()).toEqual([{ kind: 'relay', key: 'report:old', generation: 0 },
@@ -423,10 +460,10 @@ it('writes the Sources\' records in their current shape once, so no Source conve
 
 it('keeps each fact of a ticket once: its end, its latest report, and no worker Session it can derive', () => {
   const base = { id: 't', title: 'Fix', decisionId: 'd', channels: [], inputs: [], undelivered: [], createdAt: '1', updatedAt: '2',
-    mandate: mandate({ via: 'listed' }), origin: { triggerId: 'x', triggerIds: ['x'] }, execution: { name: 'fix', directory: '/w', session: 'worker-t', assignment: 'Do it.' } }
+    mandate: mandate({ via: 'listed' }), origin: { triggerId: 'x', triggerIds: ['x'] }, execution: { shortName: 'fix', directory: '/w', session: 'worker-t', assignment: 'Do it.' } }
   const open = withoutCopies({ ...base, state: 'open', summary: 'Working on it',
     assignments: [{ id: 'a1', ticketId: 't', ref: 'worker-t', state: 'running', createdAt: '1' }] })
-  expect(open).toEqual({ ...base, execution: { name: 'fix', directory: '/w', assignment: 'Do it.' },
+  expect(open).toEqual({ ...base, execution: { shortName: 'fix', directory: '/w', assignment: 'Do it.' },
     assignments: [{ id: 'a1', state: 'running', createdAt: '1', report: { state: 'progress', summary: 'Working on it', at: '2' } }] })
   // A report the ticket had stays the latest one; an ended ticket without an end record ended closed.
   const reported = { id: 'a1', ticketId: 't', ref: '', state: 'ended', createdAt: '1', report: { state: 'ready', summary: 'Done', at: '2' } }
@@ -475,7 +512,7 @@ it('names the ticket it stopped at when a ticket does not read, and leaves the d
   const path = join(directory, 'db.sqlite')
   const { inputs: _inputs, ...broken } = ticket10('t9')
   schema10(path, {}, { ticket: [broken] })
-  expect(() => new Store(path)).toThrow(/^The orchestrator database is unchanged at schema 10: its migration to schema 11 failed: ticket t9: /)
+  expect(() => new Store(path)).toThrow(/^The orchestrator database is unchanged at schema 10: its migration to schema 12 failed: ticket t9: /)
   const db = new DatabaseSync(path)
   expect(db.prepare("SELECT value FROM kv WHERE key='schema'").get()).toEqual({ value: '10' })
   expect(JSON.parse(String(db.prepare("SELECT value FROM ticket WHERE id='t9'").get()!.value))).toEqual(broken)

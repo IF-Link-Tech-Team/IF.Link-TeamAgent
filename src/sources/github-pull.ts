@@ -25,7 +25,7 @@ export const agentPull = (pr: { user: { login: string }; head?: { repo?: { full_
   sameName(pr.user.login, deployment.github.login) && sameName(pr.head?.repo?.full_name ?? '', deployment.repository)
 /** True when a branch belongs to the ticket: its last path segment is the ticket's short name, such as `agent/<name>`. */
 export const ticketBranch = (ticket: Pick<Ticket, 'execution'>, ref: string): boolean =>
-  !!ticket.execution?.name && ref.split('/').at(-1) === ticket.execution.name
+  !!ticket.execution?.shortName && ref.split('/').at(-1) === ticket.execution.shortName
 const AUTO_MERGE_ON: ThreadFact = { label: { zh: '自动合并', en: 'Auto-merge' }, value: { zh: '已开启', en: 'on' } }
 
 /**

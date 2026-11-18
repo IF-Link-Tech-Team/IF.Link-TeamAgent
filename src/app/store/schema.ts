@@ -1,7 +1,7 @@
 /** The SQLite schema, its generated columns, and the version check that refuses a database it cannot migrate. */
 import { chmodSync } from 'node:fs'
 import { KV } from '../../kv.ts'
-import { OLDEST_SCHEMA, SCHEMA_VERSION, migrateTo11, tooOld } from '../migration.ts'
+import { OLDEST_SCHEMA, SCHEMA_VERSION, migrateTo11, migrateTo12, tooOld } from '../migration.ts'
 import type { StoreCore } from './core.ts'
 
 /**
@@ -84,7 +84,8 @@ export function initializeSchema(core: StoreCore, path: string): void {
     core.atomic(() => {
       createTables(core)
       addColumns(core)
-      if (migrating) migrateTo11(core as unknown as Parameters<typeof migrateTo11>[0])
+      if (migrating && version! < 11) migrateTo11(core as unknown as Parameters<typeof migrateTo11>[0])
+      if (migrating) migrateTo12(core as unknown as Parameters<typeof migrateTo12>[0])
       if (version !== SCHEMA_VERSION) core.set(KV.store.schema, SCHEMA_VERSION)
     })
   } catch (error) {

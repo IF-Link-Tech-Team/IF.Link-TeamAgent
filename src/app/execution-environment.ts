@@ -38,7 +38,7 @@ export function environmentOf(input: { deployment: Deployment; sources: SourceRe
 /** Combines a ticket's fixed directory, name, and origin trigger with the deployment's current settings. */
 export function ticketEnvironment(input: { deployment: Deployment; sources: SourceRegistry; settings: Settings; ticket: Ticket; trigger?: Trigger }) {
   const { ticket, trigger, ...rest } = input
-  const values = { id: ticket.id, name: ticket.execution?.name ?? '', directory: ticket.execution?.directory ?? '' }
+  const values = { id: ticket.id, name: ticket.execution?.shortName ?? '', directory: ticket.execution?.directory ?? '' }
   return environmentOf({ ...rest, ticket: values, ...trigger ? { trigger } : {} })
 }
 export function environmentLines(variables: Variable[]): string {

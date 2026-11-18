@@ -86,7 +86,7 @@ export function heartbeatTrigger(card: string, at: number, window: string, chatI
 }
 
 /** A ticket's directory name ends with its short id; the card reads better without it. */
-const displayName = (ticket: Ticket): string => (ticket.execution?.name || ticket.title).replace(/-[0-9a-f]{12}$/, '')
+const displayName = (ticket: Ticket): string => (ticket.execution?.shortName || ticket.title).replace(/-[0-9a-f]{12}$/, '')
 
 /** When an open ticket last moved: its latest report, or its creation. */
 const movedAt = (ticket: Ticket): number | undefined => {

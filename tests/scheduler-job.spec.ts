@@ -248,10 +248,10 @@ describe('scheduler kind', () => {
 
 const ticket = (overrides: Partial<Ticket> = {}): Ticket => ({ id: 't', title: 'x', decisionId: 'd',
   mandate: { strength: 'inferred', policyVersion: 'v', basis: { via: 'admission', cell: 'unlistedUnaddressed' },
-    actor: { source: 'scheduler', id: '' }, scope: '' },
+    actor: { source: 'scheduler', id: '' }, workScope: '' },
   channels: [], assignments: [], inputs: [], undelivered: [], createdAt: '2026-11-13T00:00:00.000Z', updatedAt: '',
   origin: { triggerId: 'x', triggerIds: ['x'] }, ...overrides })
-const execution = { name: '新生比赛推文-ade080e43b46', directory: 'dir', assignment: 'a' }
+const execution = { shortName: '新生比赛推文-ade080e43b46', directory: 'dir', assignment: 'a' }
 
 describe('openEntries', () => {
   it('names the stage and how long the ticket has waited since its last report', () => {

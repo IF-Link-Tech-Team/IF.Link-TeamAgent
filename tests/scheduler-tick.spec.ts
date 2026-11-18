@@ -8,10 +8,10 @@ import { SchedulerConfigSchema, tickScheduler, type SchedulerDeps } from '../src
 const HOUR = 3_600_000
 /** 10:00 in Shanghai; a daily job at 09:30 is therefore already due today. */
 const NOW = Date.parse('2026-11-13T02:00:00Z')
-const execution = { name: '新生比赛推文-ade080e43b46', directory: 'dir', assignment: 'a' }
+const execution = { shortName: '新生比赛推文-ade080e43b46', directory: 'dir', assignment: 'a' }
 const ticket = (overrides: Partial<Ticket> = {}): Ticket => ({ id: 't', title: 'x', decisionId: 'd',
   mandate: { strength: 'inferred', policyVersion: 'v', basis: { via: 'admission', cell: 'unlistedUnaddressed' },
-    actor: { source: 'scheduler', id: '' }, scope: '' },
+    actor: { source: 'scheduler', id: '' }, workScope: '' },
   channels: [], assignments: [], inputs: [], undelivered: [], createdAt: '2026-11-13T00:00:00.000Z', updatedAt: '',
   origin: { triggerId: 'x', triggerIds: ['x'] }, ...overrides })
 

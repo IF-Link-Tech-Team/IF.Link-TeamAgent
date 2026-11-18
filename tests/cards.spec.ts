@@ -120,11 +120,11 @@ const trigger: Trigger = { id: 'request-1', source: 'github', threads: [{ source
   at: '2026-09-09T00:00:00Z', text: 'Please inspect the failing check.\n' + 'Additional context. '.repeat(20), meta: {} }
 const SUMMARY = 'The focused check passed.\n' + 'Detailed evidence. '.repeat(20)
 const ticket: Ticket = { id: 'ticket-1', title: 'Inspect failing check', decisionId: 'd1', channels: [], inputs: [], undelivered: [],
-  mandate: { strength: 'explicit', policyVersion: 'v1', basis: { via: 'listed', sender: 'Alice' }, actor: trigger.actor, scope: 'small' },
+  mandate: { strength: 'explicit', policyVersion: 'v1', basis: { via: 'listed', sender: 'Alice' }, actor: trigger.actor, workScope: 'small' },
   assignments: [{ id: 'a1', state: 'running', createdAt: '2026-09-09T00:00:00Z', startedAt: '2026-09-09T00:00:00Z', report: { state: 'ready', summary: SUMMARY, at: '' } }],
   createdAt: '2026-09-09T00:00:00Z', updatedAt: '2026-09-09T00:00:00Z',
   origin: { triggerId: 'request-1', triggerIds: ['request-1'] },
-  execution: { name: 'ticket-1', directory: '/worktrees/ticket-1', assignment: 'Inspect the check.' },
+  execution: { shortName: 'ticket-1', directory: '/worktrees/ticket-1', assignment: 'Inspect the check.' },
   follows: [{ thread: 'github:42', own: true }] }
 it('shows a trigger and a ticket as cards with a short preview and references to their bodies', () => {
   const card = triggerCard(trigger, { fanout: ['ticket-1'], evalId: 'e1', decisionId: 'd1', at: '' })
@@ -138,7 +138,7 @@ it('shows a trigger and a ticket as cards with a short preview and references to
   expect(ticketDetails(ticket, threads, batch)).toEqual({ ticket_id: 'ticket-1', title: 'Inspect failing check',
     state: 'person/review', strength: 'explicit', pr_number: 42, read: 'ticket/ticket-1', trigger_id: 'request-1', decision_id: 'd1',
     batch: [{ trigger_id: 'request-2', from: 'alice', at: trigger.at, preview: 'Also the flaky one.', read: 'trigger/request-2' }],
-    threads, directory: '/worktrees/ticket-1', scope: mandate.scope, requested_by: 'alice', inputs: { items: [] },
+    threads, directory: '/worktrees/ticket-1', scope: mandate.workScope, requested_by: 'alice', inputs: { items: [] },
     assignments: { items: [{ id: 'a1', state: 'running', at: '2026-09-09T00:00:00Z', report: { state: 'ready', at: '', preview: expect.stringMatching(/^The focused/),
       chars: SUMMARY.length, read: 'ticket/ticket-1/report/a1' } }] },
     assignment: 'ticket/ticket-1/assignment', result: 'ticket/ticket-1/result', transcript: 'ticket/ticket-1/transcript' })

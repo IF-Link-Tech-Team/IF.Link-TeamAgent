@@ -888,7 +888,7 @@ describe('the Executor\'s parts', () => {
         scope: '' } } as unknown as Ticket
     const execution = ticketExecution(ticket, { kind: 'accept', title: 'Fix', scope: 'the typo', reason: 'r', name: 'fix-typo' } as never,
       settings, '/state')
-    expect(execution).toEqual(expect.objectContaining({ name: 'fix-typo-ticket-01234' }))
+    expect(execution).toEqual(expect.objectContaining({ shortName: 'fix-typo-ticket-01234' }))
     expect(execution).not.toHaveProperty('session')
     // The source Trigger goes with the assignment, so the text does not point at it.
     expect(execution.assignment).toContain('Scope: the typo.')

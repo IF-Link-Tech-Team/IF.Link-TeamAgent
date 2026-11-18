@@ -36,7 +36,7 @@ describe('ACP executor', () => {
     const now = new Date().toISOString()
     const ticket: Ticket = { id: 't1', title: 'Title', decisionId: 'd', mandate: { strength: 'explicit' } as never,
       channels: [], assignments: [{ id: 'a1', state: 'pending', createdAt: now } as Assignment], inputs: [], undelivered: [], createdAt: now, updatedAt: now,
-      origin: { triggerId: 'tr1', triggerIds: ['tr1'] }, execution: { name: 'ticket', directory: cwd, assignment: 'Do it', runtime: 'fake', model: 'm' } }
+      origin: { triggerId: 'tr1', triggerIds: ['tr1'] }, execution: { shortName: 'ticket', directory: cwd, assignment: 'Do it', runtime: 'fake', model: 'm' } }
     const settings = SettingsSchema.parse({})
     settings.runtimes.fake = { enabled: true, protocol: 'acp', command: process.execPath, args: [script], env: {}, envFile: '', promptFiles: [],
       modelMode: 'config', modelArg: '', mcpConfigPath: '', mcpExposure: '', concurrency: 1, maxWallMinutes: 1, maxTurns: 5 }

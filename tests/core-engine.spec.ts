@@ -120,7 +120,7 @@ describe('eval', () => {
     const h = harness()
     const decision = accepted(h)
     const ticket = h.repo.tickets.get(decision.ticketId!)!
-    expect(ticket).toMatchObject({ title: 'Fix', mandate: { strength: 'explicit', policyVersion: 'v1', basis: { via: 'listed' }, actor: member, scope: 'small' }, channels: [trigger('1').channel],
+    expect(ticket).toMatchObject({ title: 'Fix', mandate: { strength: 'explicit', policyVersion: 'v1', basis: { via: 'listed' }, actor: member, workScope: 'small' }, channels: [trigger('1').channel],
       origin: { triggerId: '1', triggerIds: ['1'] } })
     expect(ticket).not.toHaveProperty('ended')
     expect(ticket.assignments).toEqual([expect.objectContaining({ state: 'running', startedAt: expect.any(String) })])

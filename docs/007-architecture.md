@@ -160,7 +160,7 @@ Its interfaces are grouped by purpose:
 - **Outbox receipts:** `replyStatus` and `receipts`, written only by Outbox. Receipt operations are `get`, `waiting`, `behind`, `add`, `settle` and `withdraw`. `behind` checks whether an earlier message for the same Ticket and conversation is waiting with fewer than three failures. A withdrawn message settles with `channelGone` or `channelIgnored`. Read queries expose failed and dropped replies through `failingReplies`, `droppedReplies` and `droppedSince`.
 - **Typed key-value records:** `get`, `set`, `delete` and `keys`, using entries from `KV`.
 
-`afterCommit` runs an action only after the transaction commits, never after rollback. Runtime reads records in their stored shape; the schema 11 migration converts older supported records at startup.
+`afterCommit` runs an action only after the transaction commits, never after rollback. Runtime reads records in their stored shape; the schema 12 migration converts older supported records at startup.
 
 ### Effects
 
@@ -338,7 +338,7 @@ Some generic modules still refer directly to GitHub or Feishu:
 | `src/app/store/domain.ts` | The aggregates as rows — Triggers, Threads, Tickets, Decisions — with the thread and search indexes |
 | `src/app/store/outbox.ts` | Outbox receipts, and `Receipt`, a message of the outbox |
 | `src/app/store-read.ts` | `storeReads`: the Store's read queries for the views, the tools and the Sources' polls, which never write |
-| `src/app/migration.ts` | The schema 11 migration: one step from schema 10 that writes every stored record in its current shape |
+| `src/app/migration.ts` | The migrations that write every stored record in its current shape: schema 10 → 11 (the layout changes), then 11 → 12 (the renamed fields: a Mandate's `workScope`, a basis `meta`, an Execution's `shortName`, an Eval's `candidateReached`) |
 | `src/app/effects.ts` | Effects |
 | `src/app/versions.ts` | `Versions`: a record kept as numbered snapshots with a pointer to the current one, for the settings and the prompts |
 | `src/app/cache.ts` | `TextCache`: texts kept in memory within a size, the least recently used dropped first |
@@ -482,7 +482,7 @@ Some generic modules still refer directly to GitHub or Feishu:
 | `tests/mcp-server.spec.ts` | The worker MCP server: initialize, tools/list, tools/call, and a token refused for another ticket |
 | `tests/views.spec.ts` | What the management views derive from the Store, such as the Thread a dropped message belongs to |
 | `tests/timeline.spec.ts` | A Thread's pages and a Trigger's neighbours by time and then id, with every received Trigger's time in one form |
-| `tests/migration.spec.ts` | The schema 11 migration: every stored record in its current shape, and the refusal of older schemas |
+| `tests/migration.spec.ts` | The migrations: every stored record in its current shape, the renamed fields of a schema 11 record, and the refusal of older schemas |
 | `tests/limits.spec.ts` | The single source of validation bounds: every numeric input bound in the panel comes from `LIMITS`, never a literal |
 | `tests/store.spec.ts` | Repositories and their working sets, in SQLite as in memory, the kv area, with every key of `KV` spelled only in `src/kv.ts` and the migration, settings history and queries |
 | `tests/search.spec.ts` | Full-text search over tickets, triggers and decisions: Chinese substrings through the trigram index, the kinds filter and the short-query fallback, replacing a record's text, the index rebuilt on an older database, and the main Session's tool with the read paths it returns |
@@ -537,7 +537,7 @@ Read caches use bounded in-memory `TextCache` instances and are lost on restart.
 
 Nothing deletes old records yet, so these grow without bound: the `trigger`, `disposition` and `decision` rows; ended Tickets and their Threads; the outbox's receipts; and in `kv`, every saved settings revision and prompt version, the prompt revisions each Session worked under, and the Sources' records per Thread and per Issue or pull request.
 
-`SCHEMA_VERSION` only increases. A database of a newer version refuses to start; `src/app/migration.ts` upgrades a database of the pre-release schema 10 once, at start, and refuses an older one.
+`SCHEMA_VERSION` only increases. A database of a newer version refuses to start, which is what makes a rollback to an earlier build need the backup rather than a silent half-read; `src/app/migration.ts` upgrades a schema 10 database through 11 to 12 at start, and refuses an older one.
 
 ## Model-facing interfaces
 

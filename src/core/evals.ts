@@ -354,7 +354,7 @@ export class Evals extends EnginePart {
     const at = this.now()
     const basis = { ...evaluation.basis, ...(outcome.rules ? { rules: outcome.rules } : {}) }
     const { strength, policyVersion, actor } = evaluation
-    const mandate: Mandate = { strength, policyVersion, basis, actor, scope: outcome.scope }
+    const mandate: Mandate = { strength, policyVersion, basis, actor, workScope: outcome.scope }
     const ticketId = key('ticket', evaluation.id)
     const audit = outcome.audit ? { audit: outcome.audit } : {}
     const decision = this.finish(thread, evaluation, { kind: 'accept', reason: reasonOf(outcome.reason), ...audit, mandate, ticketId })

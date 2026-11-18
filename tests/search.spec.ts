@@ -16,7 +16,7 @@ const open = (name = 'orchestrator.sqlite') => new Store(join(directory, name))
 const trigger = (id: string, text: string, at = '2026-09-01T00:00:00.000Z'): Trigger =>
   ({ id, source: 'feishu', threads: [{ source: 'feishu', id: 'oc_1:om_1' }], actor: { source: 'feishu', id: 'u' }, human: true, at, text, meta: {} })
 const ticket = (id: string, title: string, summary?: string, at = '2026-09-02T00:00:00.000Z'): Ticket => ({
-  id, title, decisionId: '', mandate: { strength: 'explicit', policyVersion: '', basis: { via: 'listed' }, actor: { source: 'x', id: '' }, scope: '' },
+  id, title, decisionId: '', mandate: { strength: 'explicit', policyVersion: '', basis: { via: 'listed' }, actor: { source: 'x', id: '' }, workScope: '' },
   channels: [], assignments: summary === undefined
     ? [{ id: `${id}-a`, state: 'running', createdAt: '' }]
     : [{ id: `${id}-a`, state: 'ended', createdAt: '', report: { state: 'ready', summary, at: '' } }],

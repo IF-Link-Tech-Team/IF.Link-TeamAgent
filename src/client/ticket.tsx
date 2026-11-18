@@ -99,7 +99,7 @@ function MandateDetails({ ticket, actor }: { ticket: TicketPageView; actor: stri
   const version = <button type="button" className="dt-textlink dt-mono" onClick={() => navigate(settingsRoute('eval',
     { version: mandate.policyVersion }))}>{mandate.policyVersion.slice(0, 8)}</button>
   return <Section title={t('mandateDetails')} icon="shield">
-    <KeyValues rows={[...rows, [t('term.scope'), legacy ? t('legacyScopeShort') : mandate.scope || t('empty')],
+    <KeyValues rows={[...rows, [t('term.scope'), legacy ? t('legacyScopeShort') : mandate.workScope || t('empty')],
       ...facts.map((item): [string, string] => [valueLabel(t, 'basis', item.name), fact(item)]),
       ...legacy ? [] : [[t('policyVersion'), version] as [string, ReactNode]]]} />
   </Section>
@@ -185,8 +185,8 @@ export function TicketPage({ id }: { id: string }) {
       <Details icon="hash" title={t('identifiers')}>
         <KeyValues rows={[[t('ticketId'), <span className="dt-mono">{data.id}</span>], [t('executionDirectory'), <span
           className="dt-mono">{data.directory ?? t('empty')}</span>],
-          ...legacy && data.mandate.scope ? [[t('legacyAssignment'), <span
-            className="dt-mono dt-clamp">{data.mandate.scope}</span>] as [string, ReactNode]] : []]} />
+          ...legacy && data.mandate.workScope ? [[t('legacyAssignment'), <span
+            className="dt-mono dt-clamp">{data.mandate.workScope}</span>] as [string, ReactNode]] : []]} />
       </Details>
     </div>
     {data.actions.stop && <div className="dt-danger-zone">

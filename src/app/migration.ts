@@ -1,5 +1,5 @@
 /**
- * Migrates a schema 10 database to schema 11 in a single transaction so runtime readers never convert legacy shapes.
+ * Migrates a schema 10 or 11 database to schema 12 in a single transaction so runtime readers never convert legacy shapes.
  * Databases older than schema 10 are rejected: this version cannot migrate them.
  */
 import { basename } from 'node:path'
@@ -17,7 +17,7 @@ import type { SettingsVersion, Store } from './store/index.ts'
 import { Versions } from './versions.ts'
 import { KV, type Key } from '../kv.ts'
 
-export const SCHEMA_VERSION = 11
+export const SCHEMA_VERSION = 12
 /** The oldest database schema version this build can open and migrate directly. */
 export const OLDEST_SCHEMA = 10
 /** Returns an error message explaining why `version` cannot be opened: older schemas need a new state directory. */
@@ -88,6 +88,58 @@ export function migrateTo11(store: Store): void {
   }
   step('the reasons', () => { reasonsAsCodes(store) })
   step('the Triggers\' times', () => { triggerTimes(store) })
+}
+/** One record field renamed by schema 12, moved only when the old name is the one present. */
+function renamed(from: string, to: string, value: Stored): Stored {
+  if (!(from in value)) return value
+  const { [from]: held, ...rest } = value
+  return { ...rest, [to]: held }
+}
+/**
+ * A Mandate rewritten from the schema 11 names: its work scope and the receiving scope's metadata were both called `scope`,
+ * which read as a permission wherever a Mandate was handled.
+ */
+function mandateOf(value: unknown): unknown {
+  if (!isObject(value)) return value
+  const withBasis: Stored = 'basis' in value ? { ...value, basis: renamed('scope', 'meta', isObject(value.basis) ? value.basis : {}) } : value
+  return renamed('scope', 'workScope', withBasis)
+}
+/** An Assignment's Execution rewritten from the schema 11 name of the ticket's short directory name. */
+const executionOf = (value: unknown): unknown => isObject(value) ? renamed('name', 'shortName', value) : value
+/** A running Eval's basis rewritten from the schema 11 name, keeping everything else as it was. */
+/** A Mandate's basis rewritten on its own, for the Eval that holds a basis without a Mandate. */
+function basisOf12(value: unknown): MandateBasis {
+  return renamed('scope', 'meta', isObject(value) ? value : {}) as unknown as MandateBasis
+}
+/**
+ * Rewrite the fields schema 12 renamed, in every record that stores them: a ticket's Mandate and Execution, a Decision's
+ * Mandate, and a running Eval's basis. The Eval's `delivered` becomes `candidateReached` here too, so an Eval that was in
+ * flight across the earlier rename keeps its deadline instead of losing it.
+ */
+export function migrateTo12(store: Store): void {
+  for (const row of store.db.prepare('SELECT id, value FROM ticket').all()) {
+    step(`ticket ${String(row.id)}`, () => {
+      const ticket = JSON.parse(String(row.value)) as Stored
+      const execution = executionOf(ticket.execution)
+      store.tickets.save({ ...ticket, mandate: mandateOf(ticket.mandate),
+        ...execution === undefined ? {} : { execution } } as unknown as Ticket)
+    })
+  }
+  for (const row of store.db.prepare("SELECT id, value FROM decision WHERE json_type(value, '$.mandate') = 'object'").all()) {
+    step(`decision ${String(row.id)}`, () => {
+      const decision = JSON.parse(String(row.value)) as Decision
+      store.decisions.save({ ...decision, mandate: mandateOf(decision.mandate) as Decision['mandate'] })
+    })
+  }
+  for (const thread of store.threads.list()) {
+    const evaluating = thread.evaluating as (typeof thread.evaluating & { delivered?: string }) | undefined
+    if (!evaluating) continue
+    step(`thread ${thread.key}`, () => {
+      const { delivered, ...rest } = evaluating
+      store.threads.save({ ...thread, evaluating: { ...rest, basis: basisOf12(rest.basis),
+        ...delivered === undefined ? {} : { candidateReached: delivered } } })
+    })
+  }
 }
 /**
  * Normalize trigger and thread timestamps to fixed-width millisecond ISO strings so lexicographical text order matches
@@ -340,9 +392,9 @@ export function basisOf(stored: unknown): MandateBasis {
   // Missing or non-object bases default to a listed-sender basis (`via: 'listed'`).
   const old = isObject(stored) ? stored : {}
   if (typeof old.via === 'string') return old as unknown as MandateBasis
-  // Older Feishu bases recorded `chatId` and `direct` at the top level instead of inside `scope`.
-  const chat = text(old.chatId) ? { source: 'feishu', scope: { chatId: old.chatId, direct: old.direct === true } } : {}
-  const received = text(old.source) ? { source: old.source as string, ...isObject(old.scope) ? { scope: old.scope } : {}, ...text(old.row) ? { row: old.row as string } : {} } : chat
+  // Older Feishu bases recorded `chatId` and `direct` at the top level instead of inside the receiving scope's metadata.
+  const chat = text(old.chatId) ? { source: 'feishu', meta: { chatId: old.chatId, direct: old.direct === true } } : {}
+  const received = text(old.source) ? { source: old.source as string, ...isObject(old.scope) ? { meta: old.scope } : {}, ...text(old.row) ? { row: old.row as string } : {} } : chat
   const sender = text(old.sender) ?? text(old.member)
   const common = { ...received, ...sender ? { sender } : {}, ...Array.isArray(old.rules) ? { rules: old.rules as string[] } : {} }
   const addressed = old.addressed === 'mention' || old.addressed === 'direct' ? old.addressed
@@ -372,7 +424,7 @@ export function ticketOf(old: Stored, answers = new Map<string, string[]>(), hum
   const triggerIds = Array.isArray(meta.triggerIds) ? meta.triggerIds as string[] : triggerId ? [triggerId] : []
   const directory = text(meta.workspace)
   // Remaining `meta` fields are obsolete: schema 6 task states stay in the `task` table, and accept fields live on `execution` and `mandate`.
-  const execution: Execution | undefined = directory ? { name: text(meta.name) ?? basename(directory), directory,
+  const execution: Execution | undefined = directory ? { shortName: text(meta.name) ?? basename(directory), directory,
     assignment: text(meta.assignment) ?? text(meta.legacyPrompt) ?? '' } : undefined
   const inputs = ticket.inputs.map((input): TicketInput => input.kind === 'trigger' ? { ...input, ...human(input.triggerId) ? { human: true } : {} }
     : input.kind !== 'reopen' || !ticket.undelivered.includes(input.id) ? input

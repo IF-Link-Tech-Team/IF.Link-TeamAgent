@@ -104,7 +104,7 @@ export class ReactionPicker implements ReactionChooser {
     return {
       message: { text: cut(trigger.text, TEXT_CHARS), where: trigger.addressed === 'direct' ? '私聊' : '群聊', addressed: !!trigger.addressed },
       ...decision ? { router: { decision: decision.kind, reason: (decision.reason ?? []).map(reason => reason.code).join(', ') } } : {},
-      ...ticket ? { ticket: { title: cut(ticket.title, TITLE_CHARS), scope: cut(ticket.mandate.scope, SCOPE_CHARS) } } : {},
+      ...ticket ? { ticket: { title: cut(ticket.title, TITLE_CHARS), scope: cut(ticket.mandate.workScope, SCOPE_CHARS) } } : {},
       ...history.length > 1 ? { recent: history } : {},
     }
   }
