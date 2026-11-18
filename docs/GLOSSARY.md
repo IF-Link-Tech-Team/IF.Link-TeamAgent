@@ -7,7 +7,8 @@ One name per concept, in code and in docs. Two spellings of one thing cost a rea
 | Concept | Spelling | Not |
 | --- | --- | --- |
 | Product, as the panel and documents name it | IF.Link Team Agent | IFLink Agent, Superagent, 超级智能体 |
-| Code repository and package | `dsh-superagent` | prototype, `dsh-superagent-prototype-IF.Link`, "the code repo" |
+| Code repository on GitHub | `IF.Link-TeamAgent` | prototype, `dsh-superagent-prototype-IF.Link`, "the code repo" |
+| Its checkout directory and package name | `dsh-superagent` | using the GitHub name for the path or the package; loaders and state directories key off both |
 | Operations repository, checked out as `ops/` | `teamagent-ops` | TeamAgent repo |
 | The platform it runs on | DSH, first written "DeepSeek Harness (DSH)" | mixing the two words |
 
