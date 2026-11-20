@@ -132,10 +132,12 @@ export const iflistKind: SourceKind<IfListConfig> = {
     variables: [
       { key: 'DSH_SUPERAGENT_IFLIST_CHAT', description: { zh: '私聊或 @ 机器人所在的会话', en: 'The conversation that messaged the bot' } },
       { key: 'DSH_SUPERAGENT_IFLIST_OWNER', description: { zh: '说话的人（union_id）；只有他能确认那张卡', en: 'The person who spoke (union_id); only they may confirm the card' } },
+      { key: 'DSH_SUPERAGENT_IFLIST_DIRECT', description: { zh: '这句话是不是私聊说的（true/false）', en: 'Whether the message was a direct message (true/false)' } },
     ],
     values: ({ trigger }) => ({
       DSH_SUPERAGENT_IFLIST_CHAT: trigger?.source === SOURCE ? String(trigger.meta.chatId ?? '') : '',
       DSH_SUPERAGENT_IFLIST_OWNER: trigger?.source === SOURCE ? String(trigger.meta.unionId ?? trigger.actor.id ?? '') : '',
+      DSH_SUPERAGENT_IFLIST_DIRECT: trigger?.source === SOURCE ? String(trigger.meta.direct === true) : '',
     }),
   },
   facts: () => ({}),

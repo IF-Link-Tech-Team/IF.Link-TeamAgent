@@ -67,13 +67,15 @@ missing and submit once. There is no direct-create command: every item passes th
 
 ## Where the card goes, and who may press it
 
-`--here` sends the card back to the conversation that spoke: a group message gets the card in that group, a direct
-message gets it in the direct message. Without it the card goes to the assignee privately — use that only when the person
-asked to keep it private.
+**A group message never gets a card in the group first.** When the thing was said in a group, `--here` sends the
+confirmation card **privately to whoever said it** (they refine or drop it without an audience), and only after they
+confirm does the item appear, as an announcement card in the original group listing who it is for. That is the same shape
+as the card people already get when something is assigned to them.
 
-`--owner` is the person who confirms; when omitted the Source fills in whoever spoke. The card names them
-with an @mention, and **only that person's click counts**: anyone else gets a refusal, so a group card cannot be confirmed
-by a bystander.
+A direct message has no announcement: `--here` sends the card back into that direct message.
+
+`--owner` is the person who confirms; when omitted the Source fills in whoever spoke. Only that person's click counts —
+anyone else gets a refusal, so a forwarded card cannot be confirmed by a bystander.
 
 `--to a,b` assigns several people at once — a meeting, a team outing, a task several people share. With more than one
 assignee the card is the three-button proposal, not the form.

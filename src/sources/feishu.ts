@@ -134,9 +134,11 @@ export const feishuKind: SourceKind<FeishuConfig> = {
       { key: 'DSH_SUPERAGENT_FEISHU_BOT', description: { zh: '飞书机器人；lark-cli 以它行事', en: 'The Feishu bot; lark-cli acts as it' } },
       { key: 'DSH_SUPERAGENT_FEISHU_CHAT', description: { zh: '接下工单的飞书群 chat_id；工单不是从飞书来的时为空', en: 'chat_id of the Feishu chat that started the ticket; empty when the ticket did not start on Feishu' } },
       { key: 'DSH_SUPERAGENT_FEISHU_ACTOR', description: { zh: '发起这条消息的人（open_id）；群里的卡片用它点名确认人', en: 'open_id of the person who wrote the message; a group card uses it to name who confirms' } },
+      { key: 'DSH_SUPERAGENT_FEISHU_DIRECT', description: { zh: '这条消息是不是私聊（true/false）', en: 'Whether the message was a direct message (true/false)' } },
     ],
     values: ({ deployment, trigger }) => ({ DSH_SUPERAGENT_FEISHU_BOT: deployment.feishu ? deployment.feishu.name || deployment.feishu.botId : '', DSH_SUPERAGENT_FEISHU_CHAT: trigger?.source === SOURCE ? String(trigger.meta.chatId ?? '') : '',
-      DSH_SUPERAGENT_FEISHU_ACTOR: trigger?.source === SOURCE ? trigger.actor.id : '' }),
+      DSH_SUPERAGENT_FEISHU_ACTOR: trigger?.source === SOURCE ? trigger.actor.id : '',
+      DSH_SUPERAGENT_FEISHU_DIRECT: trigger?.source === SOURCE ? String(trigger.meta.direct === true) : '' }),
   },
   facts: (deployment): Record<string, Localized | string> => deployment?.feishu ? { cli: { zh: `当前机器人 ${deployment.feishu.name || deployment.feishu.botId}`, en: `Current bot ${deployment.feishu.name || deployment.feishu.botId}` } } : {},
 }
