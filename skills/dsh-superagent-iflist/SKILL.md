@@ -29,26 +29,32 @@ iflist workspace-people
 
 ### Fast path for an IF.List ticket
 
-For a ticket whose source is `iflist`, the relay may carry `trigger.from` (union_id), `trigger.chat`
-(the `oc_...` conversation) and `trigger.addressed` (`direct` or `mention`). Do **not** call
-`whois` / `project list` first: `task propose` resolves project and person itself. Run one command:
+For a ticket whose source is `iflist`, the relay carries `trigger.from` (union_id), `trigger.chat`
+(the `oc_...` conversation), `trigger.addressed` and `trigger.date`. Run the skill's one-shot
+wrapper (the base directory is printed at the top of this skill):
 
 ```bash
-iflist task propose --ticket <id> --title "<action>" --project IFList \
-  --chat "<trigger.chat>" --direct true \
-  --owner "<trigger.from>" --to "<trigger.from>" --form \
-  --start YYYY-MM-DD --due YYYY-MM-DD --priority medium --why "<原话>"
+bash <skill-base>/scripts/propose-from-trigger \
+  --ticket "<id>" --title "<action>" --project "DESIGNAI" \
+  --from "<trigger.from>" --chat "<trigger.chat>" --addressed "<trigger.addressed>" \
+  --date "<trigger.date>" --to-requester \
+  --start today --due none --priority high --why "<description>"
 ```
 
-- `trigger.from` is a **union_id**; `--to` and `--owner` accept it directly.
-- `trigger.date` is the trigger's **Asia/Shanghai calendar date** (YYYY-MM-DD). Use it for “今天/明天”;
-  never derive the date from `trigger.at` (UTC) — that writes yesterday's start date.
-- `trigger.addressed === 'direct'` → `--direct true`; `mention` → `false`.
-- If `trigger.chat` is absent, use the last `oc_...` segment of `trigger.thread`; if `addressed`
-  is absent, pass `--chat` and omit `--direct` (older relays).
-- If the person says “我要/帮我”, assign `--to` to `trigger.from`; if they name someone else, use
-  that name; if it is genuinely unclear, omit `--to` and let the form ask.
-- After a successful propose, report **once** and end. Do not call `orchestrator_report` a second time.
+It fills `--owner/--chat/--direct/--to/--start/--due` from the trigger, accepts `today`/`tomorrow`
+against `trigger.date`, and runs `iflist task propose --form` once. **Do not** call `whois`,
+`project list`, `project people` or `task get` first; the wrapper/the service resolves the project
+and the person. If it prints an error, fix that field and call the wrapper again — do not fall back
+to manual exploration.
+
+- `trigger.from` is a **union_id**; the wrapper passes it to `--owner`/`--to` directly.
+- `trigger.date` is the trigger's **Asia/Shanghai calendar date**. Never derive “today” from
+  `trigger.at` (UTC) — that writes yesterday's start date.
+- If the person says “我要/帮我”, pass `--to-requester`; if they name someone else, pass
+  `--to "<name>"`; if it is unclear, omit both and let the form ask.
+- After a successful propose, report **once** and end. Do not call `orchestrator_report` twice,
+  and do not try to `task cancel` because the form is still `clarifying` — the person may be
+  submitting it.
 
 Always pass `--ticket` with the id from your assignment, and `--source` with the original message link when the request came from a thread: it is what lets a person check the claim months later.
 

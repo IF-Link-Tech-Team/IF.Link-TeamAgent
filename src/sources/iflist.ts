@@ -45,10 +45,17 @@ type InboxItem = z.infer<typeof InboxItemSchema>
 
 const PageSchema = z.object({ items: z.array(InboxItemSchema), next: z.number() })
 
-/** The Trigger one inbox message produces: the message is the unit, its chat is the Thread. */
+/**
+ * The Trigger one inbox message produces.
+ *
+ * A direct message has no natural thread. Using the chat as the Thread made every new DM a follow-up
+ * to every open ticket in that DM: one request started assignments on several tickets at once.
+ * For DMs the message is therefore its own Thread (and its own ticket/workspace); group mentions keep
+ * the chat as the Thread so a conversation stays together.
+ */
 export function iflistTrigger(item: InboxItem): Trigger {
   const direct = item.chatType === 'p2p'
-  const threadId = `${SOURCE}:${item.chatId}`
+  const threadId = `${SOURCE}:${direct ? item.messageId : item.chatId}`
   return {
     id: `${SOURCE}:${item.messageId}`,
     source: SOURCE,
@@ -59,7 +66,8 @@ export function iflistTrigger(item: InboxItem): Trigger {
     at: item.at,
     text: item.text,
     channel: { source: SOURCE, thread: threadId, address: { chatId: item.chatId, messageId: item.messageId, direct: String(direct) } },
-    meta: { chatId: item.chatId, messageId: item.messageId, direct, ...(item.unionId ? { unionId: item.unionId } : {}) },
+    meta: { chatId: item.chatId, messageId: item.messageId, direct, thread: threadId,
+      ...(item.unionId ? { unionId: item.unionId } : {}) },
   }
 }
 

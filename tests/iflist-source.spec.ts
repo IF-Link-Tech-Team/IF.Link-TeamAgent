@@ -21,17 +21,26 @@ describe('IF.List Source', () => {
   it('maps a direct message to an explicit Trigger on its own Thread', () => {
     const trigger = iflistTrigger(item() as never)
     expect(trigger.id).toBe('iflist:om_1')
-    expect(trigger.threads[0]?.id).toBe('iflist:oc_1')
+    expect(trigger.threads[0]?.id).toBe('iflist:om_1')
     expect(trigger.actor.id).toBe('on_alice')
     expect(trigger.addressed).toBe('direct')
     expect(trigger.human).toBe(true)
     expect(trigger.meta).toMatchObject({ chatId: 'oc_1', messageId: 'om_1', direct: true })
   })
 
-  it('marks a group mention as addressed by mention, and keeps it non-direct', () => {
+  it('keeps two direct messages in the same chat on separate threads', () => {
+    const first = iflistTrigger(item() as never)
+    const second = iflistTrigger(item({ messageId: 'om_2' }) as never)
+    expect(first.threads[0]?.id).not.toBe(second.threads[0]?.id)
+    expect(first.threads[0]?.id).toBe('iflist:om_1')
+    expect(second.threads[0]?.id).toBe('iflist:om_2')
+  })
+
+  it('marks a group mention as addressed by mention, and keeps the chat as its Thread', () => {
     const trigger = iflistTrigger(item({ chatType: 'group', addressed: 'mention' }) as never)
     expect(trigger.addressed).toBe('mention')
     expect(trigger.meta.direct).toBe(false)
+    expect(trigger.threads[0]?.id).toBe('iflist:oc_1')
     expect(trigger.channel?.address.direct).toBe('false')
   })
 
@@ -47,7 +56,7 @@ describe('IF.List Source', () => {
     const host = { commands: { run: async (program: string, args: string[]) => { calls.push([program, args]); return '{"ok":true}' } } }
     const state = await sendIfList(host as never, {
       id: 'r1',
-      channel: { source: 'iflist', thread: 'iflist:oc_1', address: { chatId: 'oc_1', messageId: 'om_1' } },
+      channel: { source: 'iflist', thread: 'iflist:om_1', address: { chatId: 'oc_1', messageId: 'om_1' } },
       text: '建好了',
       kind: 'reply',
     })

@@ -1,0 +1,77 @@
+#!/usr/bin/env bash
+# One-shot task proposal for an IF.List ticket.
+#
+# It removes everything the Worker used to re-derive on every run:
+#   - owner/chat/direct from the trigger (union_id accepted by iflist now)
+#   - "today"/"tomorrow" from the trigger's Asia/Shanghai date
+#   - the --form and --ticket wiring
+#
+# Usage:
+#   propose-from-trigger --ticket <id> --title "<action>" --project <IFLIST|DESIGNAI|...> \
+#     [--from on_xxx] [--chat oc_xxx] [--addressed direct|mention] [--date YYYY-MM-DD] \
+#     [--to-requester | --to <name|ou_|on_|uuid>] \
+#     [--start today|tomorrow|none|YYYY-MM-DD] [--due today|tomorrow|none|YYYY-MM-DD] \
+#     [--priority none|low|medium|high|urgent] [--why "<description>"]
+set -euo pipefail
+
+usage() {
+  sed -n '9,18p' "$0" | sed 's/^# \{0,1\}//'
+  exit 2
+}
+
+ticket='' title='' project='' from='' chat='' addressed='' date=''
+to_requester=0 to='' start='' due='' priority='' why=''
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --ticket) ticket="${2:-}"; shift 2 ;;
+    --title) title="${2:-}"; shift 2 ;;
+    --project) project="${2:-}"; shift 2 ;;
+    --from) from="${2:-}"; shift 2 ;;
+    --chat) chat="${2:-}"; shift 2 ;;
+    --addressed) addressed="${2:-}"; shift 2 ;;
+    --date) date="${2:-}"; shift 2 ;;
+    --to-requester) to_requester=1; shift ;;
+    --to) to="${2:-}"; shift 2 ;;
+    --start) start="${2:-}"; shift 2 ;;
+    --due) due="${2:-}"; shift 2 ;;
+    --priority) priority="${2:-}"; shift 2 ;;
+    --why) why="${2:-}"; shift 2 ;;
+    -h|--help) usage ;;
+    *) echo "unknown argument: $1" >&2; usage ;;
+  esac
+done
+
+[[ -n "$ticket" && -n "$title" && -n "$project" ]] || usage
+# The trigger's date is the team's calendar day. Fall back to the host's day only if absent.
+date="${date:-$(date +%F)}"
+[[ "$date" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || { echo "--date must be YYYY-MM-DD" >&2; exit 2; }
+
+resolve_date() {
+  case "$1" in
+    '') return 1 ;;
+    today) printf '%s\n' "$date" ;;
+    tomorrow) date -d "$date +1 day" +%F ;;
+    none|无|-|null) return 1 ;;
+    *) [[ "$1" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || { echo "bad date: $1" >&2; exit 2; }; printf '%s\n' "$1" ;;
+  esac
+}
+
+cmd=(iflist task propose --ticket "$ticket" --title "$title" --project "$project" --form)
+[[ -n "$from" ]] && cmd+=(--owner "$from")
+[[ -n "$chat" ]] && cmd+=(--chat "$chat")
+if [[ -n "$addressed" ]]; then
+  [[ "$addressed" == 'direct' || "$addressed" == 'mention' ]] || { echo "--addressed must be direct or mention" >&2; exit 2; }
+  cmd+=(--direct "$([[ "$addressed" == 'direct' ]] && echo true || echo false)")
+fi
+if [[ $to_requester -eq 1 ]]; then
+  [[ -n "$from" ]] || { echo "--to-requester needs --from" >&2; exit 2; }
+  cmd+=(--to "$from")
+elif [[ -n "$to" ]]; then
+  cmd+=(--to "$to")
+fi
+if start_date=$(resolve_date "$start"); then cmd+=(--start "$start_date"); fi
+if due_date=$(resolve_date "$due"); then cmd+=(--due "$due_date"); fi
+[[ -n "$priority" ]] && cmd+=(--priority "$priority")
+[[ -n "$why" ]] && cmd+=(--why "$why")
+
+exec "${cmd[@]}"
