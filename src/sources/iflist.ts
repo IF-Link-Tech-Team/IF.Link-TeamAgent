@@ -129,8 +129,14 @@ export const iflistKind: SourceKind<IfListConfig> = {
   },
   find: query => ({ threads: [], terms: [...new Set(query.match(/om_[A-Za-z0-9_-]+/g) ?? [])] }),
   environment: {
-    variables: [{ key: 'DSH_SUPERAGENT_IFLIST_CHAT', description: { zh: '私聊或 @ 机器人所在的会话', en: 'The conversation that messaged the bot' } }],
-    values: ({ trigger }) => ({ DSH_SUPERAGENT_IFLIST_CHAT: trigger?.source === SOURCE ? String(trigger.meta.chatId ?? '') : '' }),
+    variables: [
+      { key: 'DSH_SUPERAGENT_IFLIST_CHAT', description: { zh: '私聊或 @ 机器人所在的会话', en: 'The conversation that messaged the bot' } },
+      { key: 'DSH_SUPERAGENT_IFLIST_OWNER', description: { zh: '说话的人（union_id）；只有他能确认那张卡', en: 'The person who spoke (union_id); only they may confirm the card' } },
+    ],
+    values: ({ trigger }) => ({
+      DSH_SUPERAGENT_IFLIST_CHAT: trigger?.source === SOURCE ? String(trigger.meta.chatId ?? '') : '',
+      DSH_SUPERAGENT_IFLIST_OWNER: trigger?.source === SOURCE ? String(trigger.meta.unionId ?? trigger.actor.id ?? '') : '',
+    }),
   },
   facts: () => ({}),
 }

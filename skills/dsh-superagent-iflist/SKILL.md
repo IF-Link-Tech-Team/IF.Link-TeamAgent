@@ -13,11 +13,11 @@ Do not use it to park work you should do yourself, to record ideas nobody agreed
 
 ```
 iflist whois <open_id|名字|plane_uuid>
-iflist task propose --ticket <ticket id> --title "一句话" --project <IDENTIFIER|名字|uuid>
-                    [--to <人>] [--due YYYY-MM-DD] [--priority none|low|medium|high|urgent]
+iflist task propose --ticket <ticket id> --title "一句话" --project <IDENTIFIER|名字|uuid> [--here] [--owner <人>]
+                    [--to <人>[,<人>]] [--due YYYY-MM-DD] [--priority none|low|medium|high|urgent]
                     [--why "为什么要建这条"] [--source <原消息链接>] [--form] [--dry-run]
 iflist task cancel <proposal id>      # 撤回还没人处理的提议，卡片变成"已跳过"
-iflist issue create  ...same flags, 不经过人确认，直接建
+                    [--start YYYY-MM-DD]
 iflist issue update  <ABC-12> [--state <名字|组>] [--to <人>] [--due] [--priority] [--title]
 iflist issue assign  <ABC-12> --to <人>
 iflist project list
@@ -52,11 +52,31 @@ A ticket whose source is `iflist` came from a direct message to the IF.List bot 
 expects the answer from that same bot: the Source sends your reply through it automatically, so answer normally and never
 post to Feishu yourself.
 
-`--form` sends the prefilled form card straight away — the person fills only what is missing and submits once. Use it when
-the request came from that bot: it is the same card as 要改 on a proposal, without the extra tap. Without `--form` the
-card is the three-button proposal.
+A request that arrived through the IF.List bot is **always** proposed with `--form`. Never create it directly.
+
+Two things the card is for, and both are required:
+
+- **Confirming** what the person said, filled in where the request settled it (`--title`, `--project`, `--to`, `--start`, `--due`).
+- **Asking** for what the request did not settle: leave that flag out and let the card's field sit empty. Never invent an
+  assignee or a date to look complete, and never drop a date the person gave ("今天开始" is `--start`, "周五前" is `--due`).
+The person is talking to that bot and expects the card back in the same conversation; a silent create leaves them with no
+answer until your report, and the report is text, not the item. `--form` is the prefilled card: they fix only what is
+missing and submit once. There is no direct-create command: every item passes through that card. 
 
 `iflist inbox` and `iflist say` are the Source's own plumbing; do not call them for conversations a Ticket already carries.
+
+## Where the card goes, and who may press it
+
+`--here` sends the card back to the conversation that spoke: a group message gets the card in that group, a direct
+message gets it in the direct message. Without it the card goes to the assignee privately — use that only when the person
+asked to keep it private.
+
+`--owner` is the person who confirms; when omitted the Source fills in whoever spoke. The card names them
+with an @mention, and **only that person's click counts**: anyone else gets a refusal, so a group card cannot be confirmed
+by a bystander.
+
+`--to a,b` assigns several people at once — a meeting, a team outing, a task several people share. With more than one
+assignee the card is the three-button proposal, not the form.
 
 ## What a proposal is
 
@@ -71,5 +91,5 @@ Proposing the same thing twice is idempotent — the second call returns `duplic
 - Never invent an assignee, a due date or a project. If the source does not settle it, leave it out and let the card ask.
 - Never create a Plane item for work you were asked to do yourself. That is scope escape, not delegation.
 - Never send a task card to a group to "notify" people; the card goes to one person, or it does not go.
-- `issue create` (no confirmation) is for genuine operations work, not to skip the button when you are unsure.
+
 - Do not assign anything to someone who is not already on that project: Plane silently drops the assignee and the item looks unassigned.
