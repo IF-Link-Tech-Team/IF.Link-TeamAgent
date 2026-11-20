@@ -454,6 +454,7 @@ Some generic modules still refer directly to GitHub or Feishu:
 | `tests/sources.spec.ts` | The Feishu and GitHub Sources on a `SourceContext`: translation, polls and read positions, the pull request rules, health |
 | `tests/clawchat.spec.ts` | The ClawChat protocol on its own: fragment rendering, chunking across a fence, message ids, the two device ids, JWT claims, and Triggers from direct and group messages |
 | `tests/iflist-source.spec.ts` | The IF.List Source: Trigger shape for a direct message and a group @, scope with and without direct messages, the reply command it runs, and one pull advancing the cursor |
+| `tests/feishu-dedup.spec.ts` | When a group message that @s another listed bot is dropped instead of assessed, and when our own mention still wins |
 | `tests/commands.spec.ts` | CLI calls as the deployment's accounts, the Channels' answers, and repository-scoped GitHub calls |
 | `tests/reaction-picker.spec.ts` | The emoji a took-up message wears: the request it builds over every emoji Feishu has, the answer it draws, and the Channel's own mark when the account, the call or the answer fails |
 | `tests/feishu-reaction.spec.ts` | The mark a Feishu Channel puts on a message: the taken-up emoji, the finished one that replaces it, a person's equal reaction left alone, and a recalled message that takes none |

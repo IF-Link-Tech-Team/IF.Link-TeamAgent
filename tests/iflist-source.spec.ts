@@ -32,7 +32,7 @@ describe('IF.List Source', () => {
     const trigger = iflistTrigger(item({ chatType: 'group', addressed: 'mention' }) as never)
     expect(trigger.addressed).toBe('mention')
     expect(trigger.meta.direct).toBe(false)
-    expect(trigger.channel.address.direct).toBe('false')
+    expect(trigger.channel?.address.direct).toBe('false')
   })
 
   it('listens to direct messages only while they are allowed', () => {

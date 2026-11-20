@@ -83,8 +83,24 @@ export const bot = (ctx: SourceContext): FeishuBot => {
   if (!resolved) throw new Error('The Feishu Source has no working bot CLI')
   return resolved
 }
+/**
+ * A message that @s another bot the Policy lists is that bot's job, not ours: it already reached the other agent through
+ * the other app. Dropping it here keeps one human request from becoming two Tickets.
+ */
+export function addressedToAnotherBot(trigger: Trigger, self: readonly string[], listed: readonly { id: string }[]): boolean {
+  const mentioned = trigger.meta.mentions
+  if (!Array.isArray(mentioned) || mentioned.length === 0) return false
+  const ids = mentioned.filter((id): id is string => typeof id === 'string')
+  // Addressed to us, even if another bot is named too: answering our own mention matters more than avoiding a duplicate.
+  if (ids.some(id => self.includes(id))) return false
+  const others = new Set(listed.map(bot => bot.id))
+  return ids.some(id => others.has(id))
+}
+
 /** Feeds one Trigger into intake and labels each of its Threads with the chat's name and link. */
 export async function receive(ctx: SourceContext, trigger: Trigger): Promise<void> {
+  const self = [ctx.deployment.feishu?.botId, ctx.deployment.feishu?.appId].filter((id): id is string => !!id)
+  if (addressedToAnotherBot(trigger, self, ctx.policyBots())) return
   await ctx.receive(trigger)
   const chatId = String(trigger.meta.chatId ?? '')
   if (!chatId) return
