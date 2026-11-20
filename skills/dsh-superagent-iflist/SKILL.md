@@ -15,7 +15,8 @@ Do not use it to park work you should do yourself, to record ideas nobody agreed
 iflist whois <open_id|名字|plane_uuid>
 iflist task propose --ticket <ticket id> --title "一句话" --project <IDENTIFIER|名字|uuid>
                     [--to <人>] [--due YYYY-MM-DD] [--priority none|low|medium|high|urgent]
-                    [--why "为什么要建这条"] [--source <原消息链接>] [--dry-run]
+                    [--why "为什么要建这条"] [--source <原消息链接>] [--form] [--dry-run]
+iflist task cancel <proposal id>      # 撤回还没人处理的提议，卡片变成"已跳过"
 iflist issue create  ...same flags, 不经过人确认，直接建
 iflist issue update  <ABC-12> [--state <名字|组>] [--to <人>] [--due] [--priority] [--title]
 iflist issue assign  <ABC-12> --to <人>
@@ -44,6 +45,18 @@ Every command prints JSON on stdout. `{"ok":false,"code":"...","message":"..."}`
 | 4 | plane / not_found | Plane refused or the item is gone. Report the detail |
 | 6 | forbidden | the bot lacks permission (usually adding people to a project or creating projects). Ask a person |
 | 7 | quota | this ticket or today has too many proposals. Stop proposing and report |
+
+## When the person spoke to the IF.List bot
+
+A ticket whose source is `iflist` came from a direct message to the IF.List bot or from an @mention of it. The person
+expects the answer from that same bot: the Source sends your reply through it automatically, so answer normally and never
+post to Feishu yourself.
+
+`--form` sends the prefilled form card straight away — the person fills only what is missing and submits once. Use it when
+the request came from that bot: it is the same card as 要改 on a proposal, without the extra tap. Without `--form` the
+card is the three-button proposal.
+
+`iflist inbox` and `iflist say` are the Source's own plumbing; do not call them for conversations a Ticket already carries.
 
 ## What a proposal is
 
