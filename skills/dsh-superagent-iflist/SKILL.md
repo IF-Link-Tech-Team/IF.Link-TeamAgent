@@ -41,6 +41,8 @@ iflist task propose --ticket <id> --title "<action>" --project IFList \
 ```
 
 - `trigger.from` is a **union_id**; `--to` and `--owner` accept it directly.
+- `trigger.date` is the trigger's **Asia/Shanghai calendar date** (YYYY-MM-DD). Use it for “今天/明天”;
+  never derive the date from `trigger.at` (UTC) — that writes yesterday's start date.
 - `trigger.addressed === 'direct'` → `--direct true`; `mention` → `false`.
 - If `trigger.chat` is absent, use the last `oc_...` segment of `trigger.thread`; if `addressed`
   is absent, pass `--chat` and omit `--direct` (older relays).

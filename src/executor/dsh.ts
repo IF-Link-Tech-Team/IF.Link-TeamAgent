@@ -124,8 +124,14 @@ const capped = (text: string, limit: number, read: string) =>
  */
 /** Worker-facing trigger card: the generic trigger card plus the channel address the worker needs to send a card back. */
 export function workerTriggerCard(trigger: Trigger, link: { source_url?: string; source_url_read?: string }, note?: string, repliesTo?: Trigger) {
+  // The trigger's `at` is UTC. "Today" in the team's calendar is Asia/Shanghai; a worker that
+  // derives it from the UTC date writes yesterday's start date (seen on DESIGNAI-11, 2026-11-21).
+  const date = Number.isFinite(Date.parse(trigger.at))
+    ? new Date(trigger.at).toLocaleDateString('sv-SE', { timeZone: 'Asia/Shanghai' })
+    : undefined
   return {
     ...triggerMessage(trigger, link, note, repliesTo),
+    ...(date ? { date } : {}),
     ...(trigger.addressed ? { addressed: trigger.addressed } : {}),
     ...(trigger.channel?.address?.chatId ? { chat: trigger.channel.address.chatId } : {}),
   }
