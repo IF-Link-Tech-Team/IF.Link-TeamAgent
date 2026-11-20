@@ -7,7 +7,7 @@
 #   - the --form and --ticket wiring
 #
 # Usage:
-#   propose-from-trigger --ticket <id> --title "<action>" --project <IFLIST|DESIGNAI|...> \
+#   iflist-propose --ticket <id> --title "<action>" --project <IFLIST|DESIGNAI|...> \
 #     [--from on_xxx] [--chat oc_xxx] [--addressed direct|mention] [--date YYYY-MM-DD] \
 #     [--to-requester | --to <name|ou_|on_|uuid>] \
 #     [--start today|tomorrow|none|YYYY-MM-DD] [--due today|tomorrow|none|YYYY-MM-DD] \
@@ -15,7 +15,7 @@
 set -euo pipefail
 
 usage() {
-  sed -n '9,18p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '9,14p' "$0" | sed 's/^# \{0,1\}//'
   exit 2
 }
 
