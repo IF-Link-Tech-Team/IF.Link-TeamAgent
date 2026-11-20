@@ -376,7 +376,17 @@ export class DshExecutor implements Executor {
     const sessionId = workerSessionId(ticket.id)
     this.host.store.afterCommit(() => {
       this.settling.get(ticket.id)?.abort()
-      if (!ownTurn) this.host.context.agents.get(sessionId as SessionId)?.cancel({ kind: 'user' }, { keepInbox: false })
+      const agent = this.host.context.agents.get(sessionId as SessionId)
+      if (!ownTurn) agent?.cancel({ kind: 'user' }, { keepInbox: false })
+      // A ready/dropped report ends the assignment, but the model sometimes keeps calling tools
+      // (2026-11-21 worker looped on orchestrator_report for ~1 min). Give it a short grace to
+      // produce its final text, then cancel the turn; the orchestrator already has the report.
+      if (ownTurn && agent) {
+        const timer = setTimeout(() => {
+          if (agent.status !== 'idle') agent.cancel({ kind: 'user' }, { keepInbox: true })
+        }, 5_000)
+        timer.unref?.()
+      }
       // Its shell jobs and subagents stop with it, also those of a worker that ends its own turn.
       this.stopWork(ticket.id, reason)
       this.left.get(ticket.id)?.collect.abort(); this.left.delete(ticket.id); this.personal.delete(ticket.id)
