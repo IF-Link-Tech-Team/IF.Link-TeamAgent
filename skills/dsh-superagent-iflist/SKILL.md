@@ -9,7 +9,7 @@ Do not use it to park work you should do yourself, to record ideas nobody agreed
 
 ## The CLI
 
-`iflist` talks to the IF.List service, which owns the Feishu app, the card templates and the Plane token. Never call the feishu or Plane APIs directly for task cards, and never print tokens.
+`iflist` talks to the IF.List service, which owns the Feishu app, the card templates and the Plane token. Credentials live in `~/.config/iflist/config.json` (mode 600): read them never, print them never. Never call the Feishu or Plane APIs directly for task cards.
 
 ```
 iflist whois <open_id|名字|plane_uuid>
