@@ -122,6 +122,14 @@ const capped = (text: string, limit: number, read: string) =>
  * Formats a Trigger for worker delivery: author, thread, timestamp, text up to `TRIGGER_CHARS`, source message link,
  * optional routing note, and a preview of the replied-to message when the worker has not yet seen it.
  */
+/** Worker-facing trigger card: the generic trigger card plus the channel address the worker needs to send a card back. */
+export function workerTriggerCard(trigger: Trigger, link: { source_url?: string; source_url_read?: string }, note?: string, repliesTo?: Trigger) {
+  return {
+    ...triggerMessage(trigger, link, note, repliesTo),
+    ...(trigger.addressed ? { addressed: trigger.addressed } : {}),
+    ...(trigger.channel?.address?.chatId ? { chat: trigger.channel.address.chatId } : {}),
+  }
+}
 export function triggerMessage(trigger: Trigger, link: { source_url?: string; source_url_read?: string }, note?: string, repliesTo?: Trigger) {
   return { trigger_id: trigger.id, from: trigger.actor.id, thread: threadKey(trigger.threads[0]!), at: trigger.at,
     ...capped(trigger.text, TRIGGER_CHARS, `trigger/${trigger.id}`), ...link, ...(note ? { routing_note: note } : {}),
@@ -347,7 +355,7 @@ export class DshExecutor implements Executor {
     if (!trigger) return undefined
     const parent = this.host.repliedTo(trigger)
     const seen = parent && (parent.id === ticket.origin.triggerId || ticket.inputs.some(item => item.kind === 'trigger' && item.triggerId === parent.id))
-    return triggerMessage(trigger, await this.host.sourceLink(trigger), note, seen ? undefined : parent)
+    return workerTriggerCard(trigger, await this.host.sourceLink(trigger), note, seen ? undefined : parent)
   }
   /**
    * After the ending transaction commits (so a rollback leaves the worker working, and a launch the same transaction queued

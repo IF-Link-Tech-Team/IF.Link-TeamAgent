@@ -12,24 +12,49 @@ Do not use it to park work you should do yourself, to record ideas nobody agreed
 `iflist` talks to the IF.List service, which owns the Feishu app, the card templates and the Plane token. Credentials live in `~/.config/iflist/config.json` (mode 600): read them never, print them never. Never call the Feishu or Plane APIs directly for task cards.
 
 ```
-iflist whois <open_id|名字|plane_uuid>
-iflist task propose --ticket <ticket id> --title "一句话" --project <IDENTIFIER|名字|uuid> [--here] [--owner <人>]
-                    [--to <人>[,<人>]] [--due YYYY-MM-DD] [--priority none|low|medium|high|urgent]
+iflist whois <open_id|union_id|名字|plane_uuid>
+iflist task propose --ticket <ticket id> --title "一句话" --project <IDENTIFIER|名字|uuid>
+                    [--to <人|open_id|union_id>[,<人>...]] [--owner <人|union_id>]
+                    [--chat <oc_x>] [--direct true|false] [--here]
+                    [--start YYYY-MM-DD] [--due YYYY-MM-DD] [--priority none|low|medium|high|urgent]
                     [--why "为什么要建这条"] [--source <原消息链接>] [--form] [--dry-run]
 iflist task cancel <proposal id>      # 撤回还没人处理的提议，卡片变成"已跳过"
-                    [--start YYYY-MM-DD]
-iflist issue update  <ABC-12> [--state <名字|组>] [--to <人>] [--due] [--priority] [--title]
+iflist task resend <proposal id>      # 重发还没处理的卡
+iflist issue update  <ABC-12> [--state <名字|组>] [--to <人>] [--due] [--start] [--priority] [--title]
 iflist issue assign  <ABC-12> --to <人>
 iflist project list
 iflist project people <项目>
 iflist workspace-people
 ```
 
+### Fast path for an IF.List ticket
+
+For a ticket whose source is `iflist`, the relay may carry `trigger.from` (union_id), `trigger.chat`
+(the `oc_...` conversation) and `trigger.addressed` (`direct` or `mention`). Do **not** call
+`whois` / `project list` first: `task propose` resolves project and person itself. Run one command:
+
+```bash
+iflist task propose --ticket <id> --title "<action>" --project IFList \
+  --chat "<trigger.chat>" --direct true \
+  --owner "<trigger.from>" --to "<trigger.from>" --form \
+  --start YYYY-MM-DD --due YYYY-MM-DD --priority medium --why "<原话>"
+```
+
+- `trigger.from` is a **union_id**; `--to` and `--owner` accept it directly.
+- `trigger.addressed === 'direct'` → `--direct true`; `mention` → `false`.
+- If `trigger.chat` is absent, use the last `oc_...` segment of `trigger.thread`; if `addressed`
+  is absent, pass `--chat` and omit `--direct` (older relays).
+- If the person says “我要/帮我”, assign `--to` to `trigger.from`; if they name someone else, use
+  that name; if it is genuinely unclear, omit `--to` and let the form ask.
+- After a successful propose, report **once** and end. Do not call `orchestrator_report` a second time.
+
 Always pass `--ticket` with the id from your assignment, and `--source` with the original message link when the request came from a thread: it is what lets a person check the claim months later.
 
 `--title` is the issue name a human reads in Plane. Write it as an action ("整理 11 月报名表并回填二课群"), not as a subject ("报名表").
 
-`--to` accepts a Feishu `open_id`, a person's Chinese name, or a Plane user uuid; `iflist whois` resolves all three. If the person cannot be resolved the command **fails instead of guessing** — leave `--to` off and let the card ask a human, do not retry with a different name.
+`--to` accepts a Feishu `open_id`, a **union_id**, a person's Chinese name, or a Plane user uuid;
+`iflist whois` resolves all four. If the person cannot be resolved the command **fails instead of
+guessing** — leave `--to` off and let the card ask a human, do not retry with a different name.
 
 `--dry-run` resolves everything and prints the card JSON without sending it. Use it when you are unsure whether the project or the person is right.
 
@@ -94,4 +119,5 @@ Proposing the same thing twice is idempotent — the second call returns `duplic
 - Never create a Plane item for work you were asked to do yourself. That is scope escape, not delegation.
 - Never send a task card to a group to "notify" people; the card goes to one person, or it does not go.
 
-- Do not assign anything to someone who is not already on that project: Plane silently drops the assignee and the item looks unassigned.
+- Do not assign anything to someone who is not already on that project: the command fails with
+  `not_in_project` and does not create a card. Report it; do not pick someone else.

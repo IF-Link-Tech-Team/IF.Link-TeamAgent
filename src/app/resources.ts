@@ -3,7 +3,7 @@ import { readdir, readFile, stat } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { SessionId } from '@deepseek-ai/dsh-session'
 import { UserError, key, latestReport, reached, runningAssignment, threadKey, type Ticket, type Trigger } from '../core/index.ts'
-import { batchOf, inputMessage, triggerMessage, workerSessionId } from '../executor/dsh.ts'
+import { batchOf, inputMessage, triggerMessage, workerSessionId, workerTriggerCard } from '../executor/dsh.ts'
 import { readGithub } from '../sources/github-read.ts'
 import { feishuReferences, feishuRead } from '../sources/feishu-read.ts'
 import { feishuRef } from '../sources/feishu.ts'
@@ -321,7 +321,7 @@ const ROUTES: readonly Route[] = [
       // Render the input on demand with its resolved source link, matching either its short key or full input ID.
       const input = ticket.inputs.find(item => key(item.id) === part || item.id === part)
       const trigger = input?.kind === 'trigger' ? host.store.triggers.get(input.triggerId) : undefined
-      const card = trigger && input?.kind === 'trigger' ? triggerMessage(trigger, await host.sourceLink(trigger, signal), input.note) : undefined
+      const card = trigger && input?.kind === 'trigger' ? workerTriggerCard(trigger, await host.sourceLink(trigger, signal), input.note) : undefined
       const message = input && inputMessage(input, card)
       if (message === undefined) throw new Error('Unknown ticket input')
       body = message
