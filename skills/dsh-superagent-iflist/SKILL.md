@@ -30,11 +30,11 @@ iflist workspace-people
 ### Fast path for an IF.List ticket
 
 For a ticket whose source is `iflist`, the relay carries `trigger.from` (union_id), `trigger.chat`
-(the `oc_...` conversation), `trigger.addressed` and `trigger.date`. Run the skill's one-shot
-wrapper (the base directory is printed at the top of this skill):
+(the `oc_...` conversation), `trigger.addressed` and `trigger.date`. Run the one-shot wrapper (installed as `iflist-propose`; fallback:
+`bash <skill-base>/scripts/propose-from-trigger`):
 
 ```bash
-bash <skill-base>/scripts/propose-from-trigger \
+iflist-propose \
   --ticket "<id>" --title "<action>" --project "DESIGNAI" \
   --from "<trigger.from>" --chat "<trigger.chat>" --addressed "<trigger.addressed>" \
   --date "<trigger.date>" --to-requester \
