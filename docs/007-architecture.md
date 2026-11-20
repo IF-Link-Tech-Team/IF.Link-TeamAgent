@@ -396,6 +396,7 @@ Some generic modules still refer directly to GitHub or Feishu:
 | `src/sources/github-read.ts` | CI snapshots, repository reads, the `github/` resources, and `githubThreadContext`: an Issue's or pull request's conversation by page |
 | `src/sources/clawchat.ts` | The ClawChat kind and plugin entry, exported as `./clawchat-watch`: pairing from the owner's code, the live connection, and the Channel that replies through it |
 | `src/sources/scheduler.ts` | The Scheduler kind and plugin entry, exported as `./scheduler-watch`: turns the local clock into senderless Triggers confined to `meta.allowRules`, and sends results through `+messages-send` |
+| `src/sources/iflist.ts` | The IF.List kind and plugin entry, exported as `./iflist-watch`: pulls the messages the server-side IF.List bot received from its inbox over the CLI, turns each into a Trigger whose actor is the sender's union_id, and replies through the same bot with `iflist say` |
 | `src/sources/scheduler-job.ts` | The Scheduler's pure rules: schedule shapes with their next and last occurrence, the change stamp, the heartbeat judgement, and the index card a heartbeat reads |
 | `src/sources/scheduler-brief.ts` | The team memory as a heartbeat sees it: the draft folder with its unresolved parts and promised follow-ups, the dated lines of `PROJECTS.md`, and when the memory last changed |
 | `src/sources/clawchat-protocol.ts` | The ClawChat agent-side protocol: invite redemption and token refresh, the Protocol v2 WebSocket with its heartbeat and acks, and the frames as inbound messages |
@@ -452,6 +453,7 @@ Some generic modules still refer directly to GitHub or Feishu:
 | `tests/registry.spec.ts` | `SourceRegistry`: instances, validation, Policy parts, Channels and Thread context |
 | `tests/sources.spec.ts` | The Feishu and GitHub Sources on a `SourceContext`: translation, polls and read positions, the pull request rules, health |
 | `tests/clawchat.spec.ts` | The ClawChat protocol on its own: fragment rendering, chunking across a fence, message ids, the two device ids, JWT claims, and Triggers from direct and group messages |
+| `tests/iflist-source.spec.ts` | The IF.List Source: Trigger shape for a direct message and a group @, scope with and without direct messages, the reply command it runs, and one pull advancing the cursor |
 | `tests/commands.spec.ts` | CLI calls as the deployment's accounts, the Channels' answers, and repository-scoped GitHub calls |
 | `tests/reaction-picker.spec.ts` | The emoji a took-up message wears: the request it builds over every emoji Feishu has, the answer it draws, and the Channel's own mark when the account, the call or the answer fails |
 | `tests/feishu-reaction.spec.ts` | The mark a Feishu Channel puts on a message: the taken-up emoji, the finished one that replaces it, a person's equal reaction left alone, and a recalled message that takes none |

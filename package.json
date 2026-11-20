@@ -19,7 +19,8 @@
     "./package.json": "./package.json",
     "./locale/*.json": "./locale/*.json",
     "./clawchat-watch": "./lib/clawchat-watch.js",
-    "./scheduler-watch": "./lib/scheduler-watch.js"
+    "./scheduler-watch": "./lib/scheduler-watch.js",
+    "./iflist-watch": "./lib/iflist-watch.js"
   },
   "files": [
     "lib",

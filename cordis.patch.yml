@@ -18,6 +18,10 @@
     - id: dsh-superagent-clawchat
       name: dsh-superagent/clawchat-watch
       disabled: true
+    # IF.List 机器人：拉取它收到的私聊与群内 @，回话也走它。需要服务端先部署 IF.List Agent。
+    - id: dsh-superagent-iflist
+      name: dsh-superagent/iflist-watch
+      disabled: true
     # The agent preset of every Executor Session (WORKER_PRESET in src/app/sessions.ts); the main Session has its own, below.
     # It is DSH's `standard` preset with only what a worker needs, and a shell whose foreground command moves to a background job
     # after 5 seconds, so a long command does not hold back a person's message, which the Session takes at its next step. Left
