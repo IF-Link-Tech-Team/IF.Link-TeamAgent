@@ -204,8 +204,8 @@ Team Agent 里”。控制面方案也有自己的死法：
 | model metadata | `effort: off`（low 实测超时，见下） |
 | dispatch.enabled | 仍为 `false`（不改变 Worker 路由） |
 
-Source 的 `ctx.complete(prompt, 2500, 'iflist-intake')` 用这个分类取
-`provider=cilai-default / model=hy4-flash / effort=off`，并带一个“只输出 JSON、不推理”的 system message；取不到才回退 eval 模型。
+Source 的 `ctx.complete(prompt, undefined, 'iflist-intake')` 用这个分类取
+`provider=cilai-default / model=hy4-flash / effort=off`，并带一个“只输出 JSON、不推理”的 system message；不设置 maxTokens；取不到才回退 eval 模型。
 
 实测 `low` 会先输出约 1655 字符 reasoning，900 token 直接 max-tokens；
 调到 3000 token 又在 12s 内跑不完。`off` + no-reasoning system prompt 实测约 2–3 秒返回 JSON；没有 system 时 off 也会烧完输出预算。

@@ -183,7 +183,7 @@ export class Runtime extends Service implements SourceHost {
         get setupProblem() { return setup.problem }, get feishuProblem() { return setup.feishuProblem }, receive: trigger => passes.receive(trigger),
         activity: () => activity,
         // A Source gets one bounded completion, not an Agent: extraction must not grow into a Worker.
-        complete: async (prompt, maxTokens = 700, taskType = 'iflist-intake') => {
+        complete: async (prompt, maxTokens, taskType = 'iflist-intake') => {
           const routed = taskModel(store.settings(), taskType)
           const fallback = store.settings().eval.model ?? runtime.router.preferred('main')
           const provider = routed?.provider ?? fallback?.provider
@@ -192,7 +192,9 @@ export class Runtime extends Service implements SourceHost {
           let text = ''
           let reasoning = ''
           let finish = ''
-          const stream = ctx.llm.stream({ provider, model, maxTokens,
+          const stream = ctx.llm.stream({ provider, model,
+            // No maxTokens here: an explicit cap can truncate the JSON (or be spent on reasoning).
+            ...(maxTokens === undefined ? {} : { maxTokens }),
             // Intake is a short structured extraction, not a reasoning task. A system message is
             // essential: without it hy4-flash spends the whole output budget on reasoning.
             system: 'You are a strict JSON extraction engine. Return exactly one JSON object. Never explain, never reason, never use markdown.',

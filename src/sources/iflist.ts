@@ -277,7 +277,7 @@ ${recent}
   let text: string
   try {
     text = await Promise.race([
-      ctx.complete(prompt, 2_500, 'iflist-intake'),
+      ctx.complete(prompt, undefined, 'iflist-intake'),
       new Promise<never>((_, reject) => {
         const timer = setTimeout(() => reject(new Error('direct intake timed out')), 20_000)
         timer.unref?.()
