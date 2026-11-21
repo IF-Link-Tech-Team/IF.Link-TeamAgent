@@ -193,8 +193,10 @@ export class Runtime extends Service implements SourceHost {
           let reasoning = ''
           let finish = ''
           const stream = ctx.llm.stream({ provider, model, maxTokens,
-            // Intake is a short structured extraction, not a reasoning task; keep it on the fast end.
-            reasoningEffort: ReasoningEffortId(routed?.effort ?? 'low'),
+            // Intake is a short structured extraction, not a reasoning task. A system message is
+            // essential: without it hy4-flash spends the whole output budget on reasoning.
+            system: 'You are a strict JSON extraction engine. Return exactly one JSON object. Never explain, never reason, never use markdown.',
+            reasoningEffort: ReasoningEffortId(routed?.effort ?? 'off'),
             messages: [{ role: 'user', content: [{ type: 'text', text: prompt }] }] })
           for await (const chunk of stream) {
             if (chunk.type === 'text-delta') text += chunk.text
