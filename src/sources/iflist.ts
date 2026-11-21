@@ -164,7 +164,7 @@ const DirectTaskSchema = z.object({
   priority: z.enum(['none', 'low', 'medium', 'high', 'urgent']).default('none'),
   description: z.string().trim().max(2_000).optional(),
   confidence: z.number().min(0).max(1),
-}).strict()
+})
 
 let directoryCache: { at: number; text: string } | undefined
 
@@ -252,7 +252,7 @@ ${await directory(ctx, signal)}
     ...(parsed.priority !== 'none' ? ['--priority', parsed.priority] : []),
     '--why', parsed.description || item.text]
   const assignees = parsed.assignees.map((value) => value === 'self' || value === '我' ? requester : value)
-  if (assignees.length > 0) args.push('--to', ...assignees)
+  if (assignees.length > 0) args.push('--to', assignees.join(','))
   try {
     await ctx.commands.run(CLI, args)
     return true
