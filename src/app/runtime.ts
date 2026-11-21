@@ -190,16 +190,22 @@ export class Runtime extends Service implements SourceHost {
           const model = routed?.model ?? fallback?.model
           if (!provider || !model) throw new Error('No model configured for Source intake')
           let text = ''
+          let reasoning = ''
+          let finish = ''
           const stream = ctx.llm.stream({ provider, model, maxTokens,
             // Intake is a short structured extraction, not a reasoning task; keep it on the fast end.
             reasoningEffort: ReasoningEffortId(routed?.effort ?? 'low'),
             messages: [{ role: 'user', content: [{ type: 'text', text: prompt }] }] })
           for await (const chunk of stream) {
             if (chunk.type === 'text-delta') text += chunk.text
-            else if (chunk.type === 'finish' && chunk.reason.kind === 'error') {
-              throw new Error(`Source intake model failed: ${chunk.reason.failure.code}`)
+            else if (chunk.type === 'reasoning-delta') reasoning += chunk.text
+            else if (chunk.type === 'block-end' && chunk.block.type === 'text' && !text) text = chunk.block.text
+            else if (chunk.type === 'finish') {
+              finish = chunk.reason.kind
+              if (chunk.reason.kind === 'error') throw new Error(`Source intake model failed: ${chunk.reason.failure.code}`)
             }
           }
+          if (!text.trim()) throw new Error(`Source intake returned empty text (${finish || 'no finish'}, reasoning ${reasoning.length} chars)`)
           return text
         } }
       this.actions = new Actions({ engine, main: engine, store, requestPass: () => { this.passes.request() },

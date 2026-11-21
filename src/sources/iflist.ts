@@ -155,16 +155,31 @@ export const iflistKind: SourceKind<IfListConfig> = {
   facts: () => ({}),
 }
 
+const text = (value: unknown): string => typeof value === 'string' ? value.trim() : ''
+const date = (value: unknown): string | undefined => {
+  const raw = text(value)
+  return /^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : undefined
+}
+const priority = (value: unknown): 'none' | 'low' | 'medium' | 'high' | 'urgent' => {
+  const raw = text(value).toLowerCase()
+  if (raw === 'urgent' || raw === '紧急' || raw === '最高') return 'urgent'
+  if (raw === 'high' || raw === '高' || raw === '次高') return 'high'
+  if (raw === 'medium' || raw === '中' || raw === '中等') return 'medium'
+  if (raw === 'low' || raw === '低') return 'low'
+  return 'none'
+}
 const DirectTaskSchema = z.object({
-  title: z.string().trim().min(1).max(120),
-  project: z.string().trim().min(1).max(80),
-  assignees: z.array(z.string().trim().min(1)).max(10).default([]),
-  start: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullish(),
-  due: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullish(),
-  priority: z.enum(['none', 'low', 'medium', 'high', 'urgent']).default('none'),
-  description: z.string().trim().max(2_000).optional(),
-  confidence: z.number().min(0).max(1),
-  duplicate_of: z.string().trim().optional(),
+  title: z.preprocess(text, z.string().min(1).max(120)),
+  project: z.preprocess((value) => typeof value === 'object' && value ? text((value as { identifier?: unknown; name?: unknown }).identifier)
+    || text((value as { name?: unknown }).name) : text(value), z.string().min(1).max(80)),
+  assignees: z.preprocess((value) => Array.isArray(value) ? value.map(text).filter(Boolean) : text(value) ? [text(value)] : [],
+    z.array(z.string()).max(10)),
+  start: z.preprocess(date, z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional()),
+  due: z.preprocess(date, z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional()),
+  priority: z.preprocess(priority, z.enum(['none', 'low', 'medium', 'high', 'urgent'])),
+  description: z.preprocess(text, z.string().max(2_000)).optional(),
+  confidence: z.coerce.number().min(0).max(1),
+  duplicate_of: z.preprocess(text, z.string().optional()),
 })
 
 let directoryCache: { at: number; text: string } | undefined
@@ -196,6 +211,29 @@ async function directory(ctx: SourceContext, signal: AbortSignal): Promise<strin
   } catch {
     return ''
   }
+}
+
+/** Find the first balanced JSON object in a model reply, tolerating prose or code fences around it. */
+function firstJsonObject(raw: string): string | undefined {
+  const start = raw.indexOf('{')
+  if (start < 0) return undefined
+  let depth = 0, quoted = false, escaped = false
+  for (let index = start; index < raw.length; index += 1) {
+    const char = raw[index]
+    if (quoted) {
+      if (escaped) escaped = false
+      else if (char === '\\') escaped = true
+      else if (char === '"') quoted = false
+      continue
+    }
+    if (char === '"') { quoted = true; continue }
+    if (char === '{') depth += 1
+    else if (char === '}') {
+      depth -= 1
+      if (depth === 0) return raw.slice(start, index + 1)
+    }
+  }
+  return undefined
 }
 
 /**
@@ -239,7 +277,7 @@ ${recent}
   let text: string
   try {
     text = await Promise.race([
-      ctx.complete(prompt, 900, 'iflist-intake'),
+      ctx.complete(prompt, 1_500, 'iflist-intake'),
       new Promise<never>((_, reject) => {
         const timer = setTimeout(() => reject(new Error('direct intake timed out')), 12_000)
         timer.unref?.()
@@ -251,12 +289,12 @@ ${recent}
   }
   let parsed: z.infer<typeof DirectTaskSchema>
   try {
-    const start = text.indexOf('{')
-    const end = text.lastIndexOf('}')
-    if (start < 0 || end <= start) return false
-    parsed = DirectTaskSchema.parse(JSON.parse(text.slice(start, end + 1)))
-  } catch {
-    directNote = 'json invalid'
+    const json = firstJsonObject(text)
+    if (!json) throw new Error('no JSON object')
+    parsed = DirectTaskSchema.parse(JSON.parse(json))
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error)
+    directNote = `json: ${reason} | raw: ${text.replace(/\s+/g, ' ').slice(0, 140)}`.slice(0, 300)
     return false
   }
   if (parsed.duplicate_of) {
