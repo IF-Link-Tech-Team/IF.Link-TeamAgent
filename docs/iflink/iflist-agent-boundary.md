@@ -202,7 +202,7 @@ Team Agent 里”。控制面方案也有自己的死法：
 | family | `cilai-default`，label `HY4 Flash`，harness `dsh` |
 | models S/M/L | `hy4-flash` / `hy4-flash` / `hy4-flash` |
 | model metadata | `effort: off`（low 实测超时，见下） |
-| dispatch.enabled | 仍为 `false`（不改变 Worker 路由） |
+| dispatch.enabled | `true`（按类型路由已启用；DSH 支持 per-ticket provider/model） |
 
 Source 的 `ctx.complete(prompt, undefined, 'iflist-intake')` 用这个分类取
 `provider=cilai-default / model=hy4-flash / effort=off`，并带一个“只输出 JSON、不推理”的 system message；不设置 maxTokens；取不到才回退 eval 模型。
@@ -213,3 +213,25 @@ Source 的 `ctx.complete(prompt, undefined, 'iflist-intake')` 用这个分类取
 
 同时给抽取 prompt 加了最近 24h 工单；模型返回 `duplicate_of` 时直接回
 “这条已经在「标题」”，不再发重复卡。这样“快车道”也保留了判重，而不是绕开它。
+
+
+## 8. DSH 按 ticket 选模型（2026-11-21 落地）
+
+此前 `route.model` 只有 ACP 外部 Harness 使用；DSH Worker 永远读 `executor.model`。
+现在：
+
+- `chooseRoute()` 把 `provider`（family id，`deepseek` 除外）和 `effort` 带进 route；
+- `Ticket.execution` 记录 `provider / model / effort`；
+- `DispatchExecutor` 写入这些字段；
+- `Sessions.ensure(..., model?)` 在新建 Worker Session 时把 route 的
+  provider/model/effort 交给 `initializeRoleModel`；
+- `DshExecutor` 启动/恢复时传 `routeModel(ticket)`；没有显式模型时仍用
+  `executor.model`。
+
+生产当前：
+
+```text
+research / chat → minimax-cn / MiniMax-M3.1-Flash / dsh
+code / creative / writing / ops / coordination → deepseek 空模型 → executor.model
+iflist-intake → cilai-default / hy4-flash / low（Source 直通，不建 Worker）
+```
