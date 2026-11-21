@@ -92,6 +92,8 @@ describe('IF.List Source', () => {
         return { run, withSignal: () => ({ run }) }
       })(),
       state: { get: () => cursor, set: (_key: string, value: number) => { cursor = value } },
+      tickets: { list: () => [], get: () => undefined },
+      notify: () => undefined,
       receive: async () => { throw new Error('must not fall back to the Engine') },
       report: () => undefined,
     }
@@ -125,6 +127,8 @@ describe('IF.List Source', () => {
         return { run, withSignal: () => ({ run }) }
       })(),
       state: { get: () => undefined, set: () => undefined },
+      tickets: { list: () => [], get: () => undefined },
+      notify: () => undefined,
       receive: async () => { throw new Error('must not fall back') },
       report: () => undefined,
     }
@@ -133,6 +137,35 @@ describe('IF.List Source', () => {
     expect(propose).toContain('--direct')
     expect(propose[propose.indexOf('--direct') + 1]).toBe('false')
     expect(propose[propose.indexOf('--chat') + 1]).toBe('oc_group')
+  })
+
+
+  it('replies with the existing ticket instead of sending a duplicate card', async () => {
+    const notes: { text: string; channel: unknown }[] = []
+    const controller = new AbortController()
+    const existing = { id: 'a'.repeat(32), title: '完成 Design Agent 需求文档', createdAt: new Date().toISOString() }
+    const ctx = {
+      config: () => ({ ...config, directIntake: true }),
+      complete: async () => JSON.stringify({ title: '完成 Design Agent 需求文档', project: 'DESIGNAI', assignees: ['self'],
+        confidence: 0.9, duplicate_of: existing.id }),
+      commands: (() => {
+        const run = async (_program: string, args: string[]): Promise<string> => {
+          if (args[0] === 'inbox') return JSON.stringify({ items: [item()], next: 1 })
+          if (args[0] === 'project') return JSON.stringify({ projects: [] })
+          if (args[0] === 'workspace-people') return JSON.stringify({ members: [] })
+          throw new Error('must not propose a duplicate')
+        }
+        return { run, withSignal: () => ({ run }) }
+      })(),
+      state: { get: () => undefined, set: () => undefined },
+      tickets: { list: () => [existing], get: (id: string) => id === existing.id ? existing : undefined },
+      notify: (message: { text: string; channel: unknown }) => { notes.push(message); controller.abort() },
+      receive: async () => { throw new Error('must not fall back') },
+      report: () => undefined,
+    }
+    await runIfList(ctx as unknown as SourceContext, controller.signal)
+    expect(notes[0]?.text).toContain('完成 Design Agent 需求文档')
+    expect(notes[0]?.text).toContain('没有重复建单')
   })
 
   it('pulls once, hands every message to the Engine, and advances the cursor', async () => {

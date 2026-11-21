@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { SettingsSchema, type Settings } from '../src/policy/index.ts'
-import { chooseRoute, modelAt } from '../src/app/dispatch.ts'
+import { chooseRoute, modelAt, taskModel } from '../src/app/dispatch.ts'
 
 const settings = (patch: (value: Settings) => void = () => {}): Settings => {
   const value = SettingsSchema.parse({})
@@ -25,6 +25,18 @@ describe('task routing', () => {
     // pi reads the bridge from its own config file; nothing else is preconfigured for it.
     expect(value.runtimes.pi).toMatchObject({ mcpConfigPath: '~/.pi/agent/mcp.json', mcpExposure: 'direct' })
     expect(value.executor.model).toBeNull()
+  })
+
+  it('resolves a bounded task type to a provider/model/effort even while Worker dispatch is off', () => {
+    const value = settings(settings => {
+      settings.dispatch.enabled = false
+      settings.dispatch.types.push({ id: 'iflist-intake', name: 'IF.List intake', description: '', families: ['cilai-default'],
+        rubric: { S: '', M: '', L: '' }, strict: false })
+      settings.dispatch.families['cilai-default'] = { label: 'HY4 Flash', enabled: true, harness: 'dsh',
+        models: { S: 'hy4-flash', M: 'hy4-flash', L: 'hy4-flash' }, harnessByModel: {}, account: '' }
+      settings.dispatch.models['hy4-flash'] = { harness: 'dsh', effort: 'low', cost: '', note: '' }
+    })
+    expect(taskModel(value, 'iflist-intake')).toEqual({ family: 'cilai-default', provider: 'cilai-default', model: 'hy4-flash', effort: 'low' })
   })
 
   it('keeps every ticket on DSH while dispatch is off', () => {

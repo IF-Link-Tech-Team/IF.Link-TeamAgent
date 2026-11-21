@@ -61,7 +61,7 @@ export interface SourceContext {
   /** Movement in the domain since this process started, for a Source that schedules its own work. */
   activity(): Activity
   /** One bounded model completion without an Agent session or tools; Sources use it for deterministic extraction. */
-  complete?(prompt: string, maxTokens?: number): Promise<string>
+  complete?(prompt: string, maxTokens?: number, taskType?: string): Promise<string>
   tickets: {
     get(id: string): Ticket | undefined
     /** Open tickets, newest first. */

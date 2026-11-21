@@ -27,7 +27,7 @@ export interface SourceContextDeps {
   /** Movement in the domain, maintained by the Runtime as events are emitted. */
   activity(): Activity
   /** One bounded model completion for a Source's extraction prompt; no Session, no tools. */
-  complete?(prompt: string, maxTokens?: number): Promise<string>
+  complete?(prompt: string, maxTokens?: number, taskType?: string): Promise<string>
 }
 
 /**

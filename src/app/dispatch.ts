@@ -15,6 +15,26 @@ export interface DispatchRequest {
   text?: string
 }
 
+/** A concrete provider/model/effort for a bounded task (used by Source intake, not by a Worker Session). */
+export interface TaskModel { family: string; provider: string; model: string; effort?: string }
+
+/** Resolve a dispatch type to the first enabled family/model without turning on Worker dispatch. */
+export function taskModel(settings: Settings, type: string, difficulty: Difficulty = 'S'): TaskModel | undefined {
+  const selected = settings.dispatch.types.find(item => item.id === type)
+  if (!selected) return undefined
+  for (const familyId of selected.families) {
+    const family = settings.dispatch.families[familyId]
+    if (!family?.enabled) continue
+    const model = modelAt(family, difficulty)
+    if (!model) continue
+    const effort = settings.dispatch.models[model]?.effort
+    // Family ids used by this bounded path are provider ids (e.g. cilai-default); a DSH Worker
+    // route may not use the model, but a one-shot completion needs the provider explicitly.
+    return { family: familyId, provider: familyId, model, ...(effort ? { effort } : {}) }
+  }
+  return undefined
+}
+
 /** The route a ticket runs on, with enough detail to explain it in the panel and to audit it later. */
 export interface DispatchRoute {
   type: string

@@ -53,6 +53,7 @@ import { Sessions } from './sessions.ts'
 import { ModelRouter } from './model-router.ts'
 import { Settings } from './settings.ts'
 import { sourceContextOf, type SourceContextDeps } from './source-context.ts'
+import { taskModel } from './dispatch.ts'
 import type { ResourceDeps } from './resources.ts'
 import { mainTools, type MainToolsHost } from './tools/main.ts'
 import { executorTools, type ExecutorToolsHost } from './tools/executor.ts'
@@ -182,13 +183,16 @@ export class Runtime extends Service implements SourceHost {
         get setupProblem() { return setup.problem }, get feishuProblem() { return setup.feishuProblem }, receive: trigger => passes.receive(trigger),
         activity: () => activity,
         // A Source gets one bounded completion, not an Agent: extraction must not grow into a Worker.
-        complete: async (prompt, maxTokens = 700) => {
-          const model = store.settings().eval.model ?? runtime.router.preferred('main')
-          if (!model) throw new Error('No model configured for Source intake')
+        complete: async (prompt, maxTokens = 700, taskType = 'iflist-intake') => {
+          const routed = taskModel(store.settings(), taskType)
+          const fallback = store.settings().eval.model ?? runtime.router.preferred('main')
+          const provider = routed?.provider ?? fallback?.provider
+          const model = routed?.model ?? fallback?.model
+          if (!provider || !model) throw new Error('No model configured for Source intake')
           let text = ''
-          const stream = ctx.llm.stream({ provider: model.provider, model: model.model, maxTokens,
+          const stream = ctx.llm.stream({ provider, model, maxTokens,
             // Intake is a short structured extraction, not a reasoning task; keep it on the fast end.
-            reasoningEffort: ReasoningEffortId('low'),
+            reasoningEffort: ReasoningEffortId(routed?.effort ?? 'low'),
             messages: [{ role: 'user', content: [{ type: 'text', text: prompt }] }] })
           for await (const chunk of stream) {
             if (chunk.type === 'text-delta') text += chunk.text
