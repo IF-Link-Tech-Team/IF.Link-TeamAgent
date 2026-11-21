@@ -201,7 +201,9 @@ async function directory(ctx: SourceContext, signal: AbortSignal): Promise<strin
  * Returns true when a card was sent (or already existed), so the caller can advance without `ctx.receive`.
  */
 async function directIntake(ctx: SourceContext, item: InboxItem, signal: AbortSignal): Promise<boolean> {
-  if (!ctx.complete || item.chatType !== 'p2p' || !item.text.trim()) return false
+  if (!ctx.complete || !item.text.trim()) return false
+  const group = item.chatType !== 'p2p'
+  if (group && item.addressed !== 'mention') return false
   // 不是任务的消息（谢谢、你好、纯讨论）不值得一次模型调用；交给 main/Worker 的既有判断。
   if (!/(新建|创建|建个?|做|整理|安排|提醒|完成|开始|截止|项目|工作项|任务|帮|需要|要)/.test(item.text)) return false
   const requester = item.unionId ?? item.openId
@@ -246,7 +248,7 @@ ${await directory(ctx, signal)}
   if (parsed.confidence < 0.55 || !parsed.title.trim() || !parsed.project.trim()) return false
 
   const args = ['task', 'propose', '--ticket', `iflist-direct:${item.messageId}`, '--title', parsed.title,
-    '--project', parsed.project, '--chat', item.chatId, '--direct', 'true', '--owner', requester,
+    '--project', parsed.project, '--chat', item.chatId, '--direct', group ? 'false' : 'true', '--owner', requester,
     '--form', '--suppress-assignment-card', '--key', `direct:${item.messageId}`,
     ...(parsed.start ? ['--start', parsed.start] : []), ...(parsed.due ? ['--due', parsed.due] : []),
     ...(parsed.priority !== 'none' ? ['--priority', parsed.priority] : []),
@@ -283,7 +285,7 @@ export async function runIfList(ctx: SourceContext, signal: AbortSignal): Promis
         const page = await pull(ctx.commands.withSignal(signal), config, after)
         for (const item of page.items) {
           // 先做一次有界的结构化抽取；成功就只发一张预填卡，失败才交给 main/Worker。
-          if (config.directIntake && item.chatType === 'p2p' && await directIntake(ctx, item, signal)) {
+          if (config.directIntake && (item.chatType === 'p2p' || item.addressed === 'mention') && await directIntake(ctx, item, signal)) {
             after = item.seq
             continue
           }

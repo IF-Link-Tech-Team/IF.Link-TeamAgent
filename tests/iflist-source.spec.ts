@@ -105,6 +105,36 @@ describe('IF.List Source', () => {
     expect(propose).toContain('high')
   })
 
+
+  it('direct-intakes a group @ with a private card and --direct false', async () => {
+    const calls: string[][] = []
+    const controller = new AbortController()
+    const ctx = {
+      config: () => ({ ...config, directIntake: true }),
+      complete: async () => JSON.stringify({ title: '写需求文档', project: 'Design Agent', assignees: ['self'],
+        start: '2026-11-21', due: '2026-11-27', priority: 'high', description: '下周五前完成。', confidence: 0.9 }),
+      commands: (() => {
+        const run = async (_program: string, args: string[]): Promise<string> => {
+          calls.push(args)
+          if (args[0] === 'inbox') return JSON.stringify({ items: [item({ chatType: 'group', addressed: 'mention', chatId: 'oc_group' })], next: 1 })
+          if (args[0] === 'project') return JSON.stringify({ projects: [{ identifier: 'DESIGNAI', name: 'Design Agent' }] })
+          if (args[0] === 'workspace-people') return JSON.stringify({ members: [{ display_name: '梁宇凡', email: 'on_alice@feishu.iflink.tech' }] })
+          if (args[0] === 'task') { controller.abort(); return JSON.stringify({ ok: true }) }
+          return '{}'
+        }
+        return { run, withSignal: () => ({ run }) }
+      })(),
+      state: { get: () => undefined, set: () => undefined },
+      receive: async () => { throw new Error('must not fall back') },
+      report: () => undefined,
+    }
+    await runIfList(ctx as unknown as SourceContext, controller.signal)
+    const propose = calls.find(args => args[0] === 'task')!
+    expect(propose).toContain('--direct')
+    expect(propose[propose.indexOf('--direct') + 1]).toBe('false')
+    expect(propose[propose.indexOf('--chat') + 1]).toBe('oc_group')
+  })
+
   it('pulls once, hands every message to the Engine, and advances the cursor', async () => {
     const received: string[] = []
     let cursor: number | undefined
