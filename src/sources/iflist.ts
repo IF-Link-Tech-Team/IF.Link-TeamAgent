@@ -167,6 +167,7 @@ const DirectTaskSchema = z.object({
 })
 
 let directoryCache: { at: number; text: string } | undefined
+let directNote = 'idle'
 
 /** A short project/person directory for the extraction prompt; cached because it changes rarely. */
 async function directory(ctx: SourceContext, signal: AbortSignal): Promise<string> {
@@ -233,7 +234,8 @@ ${await directory(ctx, signal)}
         timer.unref?.()
       }),
     ])
-  } catch {
+  } catch (error) {
+    directNote = `model: ${error instanceof Error ? error.message : String(error)}`.slice(0, 120)
     return false
   }
   let parsed: z.infer<typeof DirectTaskSchema>
@@ -243,9 +245,13 @@ ${await directory(ctx, signal)}
     if (start < 0 || end <= start) return false
     parsed = DirectTaskSchema.parse(JSON.parse(text.slice(start, end + 1)))
   } catch {
+    directNote = 'json invalid'
     return false
   }
-  if (parsed.confidence < 0.55 || !parsed.title.trim() || !parsed.project.trim()) return false
+  if (parsed.confidence < 0.55 || !parsed.title.trim() || !parsed.project.trim()) {
+    directNote = `low confidence ${parsed.confidence}`
+    return false
+  }
 
   const args = ['task', 'propose', '--ticket', `iflist-direct:${item.messageId}`, '--title', parsed.title,
     '--project', parsed.project, '--chat', item.chatId, '--direct', group ? 'false' : 'true', '--owner', requester,
@@ -257,8 +263,10 @@ ${await directory(ctx, signal)}
   if (assignees.length > 0) args.push('--to', assignees.join(','))
   try {
     await ctx.commands.run(CLI, args)
+    directNote = 'card sent'
     return true
-  } catch {
+  } catch (error) {
+    directNote = `cli: ${error instanceof Error ? error.message : String(error)}`.slice(0, 120)
     return false
   }
 }
@@ -294,7 +302,7 @@ export async function runIfList(ctx: SourceContext, signal: AbortSignal): Promis
         }
         if (page.items.length > 0) ctx.state.set(KV.cursor, after)
         failures = 0
-        report({ state: 'ready', detail: `Cursor ${after}; ${page.items.length} new message(s)`, at: new Date().toISOString() })
+        report({ state: 'ready', detail: `Cursor ${after}; ${page.items.length} new message(s); direct ${directNote}`.slice(0, 300), at: new Date().toISOString() })
       } catch (error) {
         failures += 1
         const detail = error instanceof Error ? error.message : String(error)

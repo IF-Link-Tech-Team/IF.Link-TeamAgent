@@ -48,6 +48,7 @@ import { Setup } from './setup.ts'
 import { feishuSettings } from '../sources/feishu.ts'
 import { health, type Health, type SourceContext, type SourceHost } from '../sources/host.ts'
 import type { HealthEntry } from '../infra/health.ts'
+import { ReasoningEffortId } from '@deepseek-ai/dsh-llm'
 import { Sessions } from './sessions.ts'
 import { ModelRouter } from './model-router.ts'
 import { Settings } from './settings.ts'
@@ -186,6 +187,8 @@ export class Runtime extends Service implements SourceHost {
           if (!model) throw new Error('No model configured for Source intake')
           let text = ''
           const stream = ctx.llm.stream({ provider: model.provider, model: model.model, maxTokens,
+            // Intake is a short structured extraction, not a reasoning task; keep it on the fast end.
+            reasoningEffort: ReasoningEffortId('low'),
             messages: [{ role: 'user', content: [{ type: 'text', text: prompt }] }] })
           for await (const chunk of stream) {
             if (chunk.type === 'text-delta') text += chunk.text
