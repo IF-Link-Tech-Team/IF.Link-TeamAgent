@@ -295,7 +295,7 @@ export class Sessions {
     const store = this.host.store
     const parent = scopeParentOf(agent)
     // An IF.List ticket only converts a message into a work item; no file, web or task skills.
-    const names = this.sourceOfTicket(ticketId) === 'iflist' ? ['bash', 'skill'] : WORK_TOOLS
+    const names = this.sourceOfTicket(ticketId) === 'iflist' ? ['bash', 'skill', 'job_output', 'job_list', 'job_kill'] : WORK_TOOLS
     const allow = names.filter(name => agent.ctx.tools.get(name, parent))
     return [agent.ctx.tools.restrict({ allow }), agent.ctx.tools.guard(() => {
       const current = store.tickets.get(ticketId)

@@ -170,8 +170,9 @@ const priority = (value: unknown): 'none' | 'low' | 'medium' | 'high' | 'urgent'
 }
 const DirectTaskSchema = z.object({
   title: z.preprocess(text, z.string().min(1).max(120)),
+  // Empty is allowed here: a missing project becomes the “which project?” reply, not a fallback Worker.
   project: z.preprocess((value) => typeof value === 'object' && value ? text((value as { identifier?: unknown; name?: unknown }).identifier)
-    || text((value as { name?: unknown }).name) : text(value), z.string().min(1).max(80)),
+    || text((value as { name?: unknown }).name) : text(value), z.string().max(80)),
   assignees: z.preprocess((value) => Array.isArray(value) ? value.map(text).filter(Boolean) : text(value) ? [text(value)] : [],
     z.array(z.string()).max(10)),
   start: z.preprocess(date, z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional()),
@@ -182,12 +183,14 @@ const DirectTaskSchema = z.object({
   duplicate_of: z.preprocess(text, z.string().optional()),
 })
 
-let directoryCache: { at: number; text: string } | undefined
+let directoryCache: { at: number; text: string; projects: { identifier: string; name: string }[] } | undefined
+/** Test hook: drop the cached project/person directory between cases. */
+export function resetDirectoryCache(): void { directoryCache = undefined }
 let directNote = 'idle'
 
 /** A short project/person directory for the extraction prompt; cached because it changes rarely. */
-async function directory(ctx: SourceContext, signal: AbortSignal): Promise<string> {
-  if (directoryCache && Date.now() - directoryCache.at < 600_000) return directoryCache.text
+async function directory(ctx: SourceContext, signal: AbortSignal): Promise<{ text: string; projects: { identifier: string; name: string }[] }> {
+  if (directoryCache && Date.now() - directoryCache.at < 600_000) return directoryCache
   try {
     const commands = ctx.commands.withSignal(signal)
     const projectOutput = JSON.parse(await commands.run(CLI, ['project', 'list'])) as {
@@ -196,9 +199,12 @@ async function directory(ctx: SourceContext, signal: AbortSignal): Promise<strin
     const peopleOutput = JSON.parse(await commands.run(CLI, ['workspace-people'])) as {
       members?: { display_name?: string; email?: string }[];
     }
-    const projects = (projectOutput.projects ?? [])
-      .map((project) => `${project.identifier ?? ''} ${project.name ?? ''}`.trim())
-      .filter(Boolean).join('\n')
+    const projectList = (projectOutput.projects ?? [])
+      .map((project) => ({ identifier: project.identifier ?? '', name: project.name ?? '' }))
+      .filter((project) => project.identifier || project.name)
+    const projects = projectList
+      .map((project) => `${project.identifier} ${project.name}`.trim())
+      .join('\n')
     const people = (peopleOutput.members ?? [])
       .map((member) => {
         const union = member.email?.split('@')[0] ?? ''
@@ -206,11 +212,21 @@ async function directory(ctx: SourceContext, signal: AbortSignal): Promise<strin
       })
       .filter(Boolean).join('\n')
     const text = `项目（identifier 名称）：\n${projects}\n\n人员（姓名 union_id）：\n${people}`
-    directoryCache = { at: Date.now(), text }
-    return text
+    directoryCache = { at: Date.now(), text, projects: projectList }
+    return directoryCache
   } catch {
-    return ''
+    return { text: '', projects: [] }
   }
+}
+
+/** Whether the model's project is one the service can actually resolve. */
+function knownProject(value: string, projects: { identifier: string; name: string }[]): boolean {
+  if (projects.length === 0) return true
+  const needle = value.trim().toLowerCase()
+  return projects.some((project) => project.identifier.toLowerCase() === needle
+    || project.name.toLowerCase() === needle
+    || project.name.toLowerCase().includes(needle)
+    || needle.includes(project.name.toLowerCase()))
 }
 
 /** Find the first balanced JSON object in a model reply, tolerating prose or code fences around it. */
@@ -240,23 +256,24 @@ function firstJsonObject(raw: string): string | undefined {
  * One bounded extraction call, then one `iflist task propose`; no main Session, no Worker.
  * Returns true when a card was sent (or already existed), so the caller can advance without `ctx.receive`.
  */
-async function directIntake(ctx: SourceContext, item: InboxItem, signal: AbortSignal): Promise<boolean> {
-  if (!ctx.complete || !item.text.trim()) return false
+async function directIntake(ctx: SourceContext, item: InboxItem, signal: AbortSignal): Promise<'handled' | 'skip' | 'failed'> {
+  if (!ctx.complete || !item.text.trim()) return 'skip'
   const group = item.chatType !== 'p2p'
-  if (group && item.addressed !== 'mention') return false
+  if (group && item.addressed !== 'mention') return 'skip'
   // 不是任务的消息（谢谢、你好、纯讨论）不值得一次模型调用；交给 main/Worker 的既有判断。
-  if (!/(新建|创建|建个?|做|整理|安排|提醒|完成|开始|截止|项目|工作项|任务|帮|需要|要)/.test(item.text)) return false
+  if (!/(新建|创建|建个?|做|整理|安排|提醒|完成|开始|截止|项目|工作项|任务|帮|需要|要)/.test(item.text)) return 'skip'
   const requester = item.unionId ?? item.openId
-  if (!requester) return false
+  if (!requester) return 'failed'
   const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(new Date())
-  const recent = ctx.tickets.list()
+  const recent = ctx.tickets.open()
     .filter(ticket => Date.now() - Date.parse(ticket.createdAt) < 86_400_000)
-    .slice(0, 20)
+    .slice(0, 5)
     .map(ticket => `- ${ticket.id} ${ticket.title}`)
     .join('\n') || '（无）'
+  const dir = await directory(ctx, signal)
   const prompt = `你是 IF.List 的任务解析器。把下面一条飞书私聊拆成一条待确认任务。
 今天：${today}（Asia/Shanghai，星期${'日一二三四五六'[new Date(`${today}T00:00:00Z`).getUTCDay()]}）。
-${await directory(ctx, signal)}
+${dir.text}
 
 最近 24 小时已有工单（id 标题）：
 ${recent}
@@ -285,7 +302,7 @@ ${recent}
     ])
   } catch (error) {
     directNote = `model: ${error instanceof Error ? error.message : String(error)}`.slice(0, 120)
-    return false
+    return 'failed'
   }
   let parsed: z.infer<typeof DirectTaskSchema>
   try {
@@ -295,7 +312,15 @@ ${recent}
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error)
     directNote = `json: ${reason} | raw: ${text.replace(/\s+/g, ' ').slice(0, 140)}`.slice(0, 300)
-    return false
+    return 'failed'
+  }
+  if (!knownProject(parsed.project, dir.projects)) {
+    const trigger = iflistTrigger(item)
+    const options = dir.projects.map((project) => `${project.identifier || project.name}`).filter(Boolean).join(' / ')
+    ctx.notify({ id: `direct-project:${item.messageId}`, channel: trigger.channel!, kind: 'reply',
+      text: `这条属于哪个项目？可选：${options}` })
+    directNote = `project unclear ${parsed.project}`.slice(0, 120)
+    return 'handled'
   }
   if (parsed.duplicate_of) {
     const existing = ctx.tickets.get(parsed.duplicate_of)
@@ -304,12 +329,12 @@ ${recent}
       ctx.notify({ id: `direct-duplicate:${item.messageId}`, channel: trigger.channel!, kind: 'reply',
         text: `这条已经在「${existing.title}」，没有重复建单。` })
       directNote = `duplicate ${existing.id.slice(0, 8)}`
-      return true
+      return 'handled'
     }
   }
   if (parsed.confidence < 0.55 || !parsed.title.trim() || !parsed.project.trim()) {
     directNote = `low confidence ${parsed.confidence}`
-    return false
+    return 'failed'
   }
 
   const args = ['task', 'propose', '--ticket', `iflist-direct:${item.messageId}`, '--title', parsed.title,
@@ -323,10 +348,10 @@ ${recent}
   try {
     await ctx.commands.run(CLI, args)
     directNote = 'card sent'
-    return true
+    return 'handled'
   } catch (error) {
     directNote = `cli: ${error instanceof Error ? error.message : String(error)}`.slice(0, 120)
-    return false
+    return 'failed'
   }
 }
 
@@ -352,9 +377,19 @@ export async function runIfList(ctx: SourceContext, signal: AbortSignal): Promis
         const page = await pull(ctx.commands.withSignal(signal), config, after)
         for (const item of page.items) {
           // 先做一次有界的结构化抽取；成功就只发一张预填卡，失败才交给 main/Worker。
-          if (config.directIntake && (item.chatType === 'p2p' || item.addressed === 'mention') && await directIntake(ctx, item, signal)) {
+          const addressed = item.chatType === 'p2p' || item.addressed === 'mention'
+          if (config.directIntake && addressed) {
+            const outcome = await directIntake(ctx, item, signal)
             after = item.seq
-            continue
+            if (outcome === 'handled') continue
+            if (outcome === 'failed') {
+              // 任务管理失败时不回退 Worker：只问一句，避免把“建卡”变成“执行任务”。
+              const trigger = iflistTrigger(item)
+              ctx.notify({ id: `direct-failed:${item.messageId}`, channel: trigger.channel!, kind: 'reply',
+                text: '这条我暂时没能整理成工作项。请补充“项目 / 负责人 / 开始或截止时间”后重发。' })
+              continue
+            }
+            // 'skip'：不是任务（闲聊/感谢），仍交给 Team Agent 的既有判断。
           }
           await ctx.receive(iflistTrigger(item))
           after = item.seq

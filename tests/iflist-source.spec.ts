@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
 
-import { iflistKind, iflistTrigger, runIfList, sendIfList, type IfListConfig } from '../src/sources/iflist.ts'
+import { iflistKind, iflistTrigger, resetDirectoryCache, runIfList, sendIfList, type IfListConfig } from '../src/sources/iflist.ts'
 import type { SourceContext } from '../src/sources/host.ts'
 
 const config: IfListConfig = { pollSeconds: 1, directMessages: true, pageSize: 20, directIntake: false }
@@ -18,6 +18,7 @@ const item = (over: Partial<Record<string, unknown>> = {}) => ({
 })
 
 describe('IF.List Source', () => {
+  beforeEach(() => resetDirectoryCache())
   it('maps a direct message to an explicit Trigger on its own Thread', () => {
     const trigger = iflistTrigger(item() as never)
     expect(trigger.id).toBe('iflist:om_1')
@@ -92,7 +93,7 @@ describe('IF.List Source', () => {
         return { run, withSignal: () => ({ run }) }
       })(),
       state: { get: () => cursor, set: (_key: string, value: number) => { cursor = value } },
-      tickets: { list: () => [], get: () => undefined },
+      tickets: { open: () => [], get: () => undefined },
       notify: () => undefined,
       receive: async () => { throw new Error('must not fall back to the Engine') },
       report: () => undefined,
@@ -127,7 +128,7 @@ describe('IF.List Source', () => {
         return { run, withSignal: () => ({ run }) }
       })(),
       state: { get: () => undefined, set: () => undefined },
-      tickets: { list: () => [], get: () => undefined },
+      tickets: { open: () => [], get: () => undefined },
       notify: () => undefined,
       receive: async () => { throw new Error('must not fall back') },
       report: () => undefined,
@@ -158,7 +159,7 @@ describe('IF.List Source', () => {
         return { run, withSignal: () => ({ run }) }
       })(),
       state: { get: () => undefined, set: () => undefined },
-      tickets: { list: () => [existing], get: (id: string) => id === existing.id ? existing : undefined },
+      tickets: { open: () => [existing], get: (id: string) => id === existing.id ? existing : undefined },
       notify: (message: { text: string; channel: unknown }) => { notes.push(message); controller.abort() },
       receive: async () => { throw new Error('must not fall back') },
       report: () => undefined,
