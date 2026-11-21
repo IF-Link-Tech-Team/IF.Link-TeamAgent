@@ -39,6 +39,17 @@ describe('task routing', () => {
     expect(taskModel(value, 'iflist-intake')).toEqual({ family: 'cilai-default', provider: 'cilai-default', model: 'hy4-flash', effort: 'low' })
   })
 
+  it('carries provider and effort for an explicit DSH model route', () => {
+    const value = settings(settings => {
+      settings.dispatch.types[0]!.families = ['cilai-default']
+      settings.dispatch.families['cilai-default'] = { label: 'HY4 Flash', enabled: true, harness: 'dsh',
+        models: { S: 'hy4-flash', M: 'hy4-flash', L: 'hy4-flash' }, harnessByModel: {}, account: '' }
+      settings.dispatch.models['hy4-flash'] = { harness: 'dsh', effort: 'low', cost: '', note: '' }
+    })
+    expect(chooseRoute(value, { type: 'creative', difficulty: 'M' })).toMatchObject({
+      family: 'cilai-default', provider: 'cilai-default', model: 'hy4-flash', effort: 'low', harness: 'dsh' })
+  })
+
   it('keeps every ticket on DSH while dispatch is off', () => {
     const route = chooseRoute(SettingsSchema.parse({}), { type: 'creative', difficulty: 'L' })
     expect(route).toMatchObject({ harness: 'dsh', family: 'deepseek', degraded: false })

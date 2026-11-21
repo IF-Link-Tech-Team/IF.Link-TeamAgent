@@ -40,7 +40,11 @@ export interface DispatchRoute {
   type: string
   difficulty: Difficulty
   family: string
+  /** Provider for a DSH Worker model override; empty means the executor default. */
+  provider?: string
   model: string
+  /** Reasoning effort from dispatch.models[model].effort, when configured. */
+  effort?: string
   harness: string
   account: string
   routeId: string
@@ -54,8 +58,11 @@ function fallback(settings: Settings, type: string, difficulty: Difficulty, reas
   const id = settings.dispatch.fallbackFamily
   const family = settings.dispatch.families[id]
   const model = family ? modelAt(family, difficulty) : ''
+  const effort = model ? settings.dispatch.models[model]?.effort : undefined
+  const provider = model && id !== 'deepseek' ? id : undefined
   const harness = family && settings.runtimes[family.harness]?.enabled ? family.harness : 'dsh'
-  return { type, difficulty, family: id, model, harness, account: family?.account ?? '', routeId: `${id}:${model || 'default'}`, degraded, reason }
+  return { type, difficulty, family: id, ...(provider ? { provider } : {}), model, ...(effort ? { effort } : {}),
+    harness, account: family?.account ?? '', routeId: `${id}:${model || 'default'}`, degraded, reason }
 }
 
 /** The nearest configured model for a difficulty: an empty slot borrows the closest one instead of dropping the family. */
@@ -117,8 +124,9 @@ export function chooseRoute(settings: Settings, request: DispatchRequest): Dispa
     if (!runtime?.enabled) continue
     // A DSH family may leave the model empty: the existing executor model and fallback chain still apply.
     if (!model && runtime.protocol !== 'dsh') continue
-    return { type, difficulty, family: id, model, harness, account: family.account,
-      routeId: `${id}:${model || 'default'}`, degraded: false, reason: `${type}/${difficulty} → ${id}` }
+    return { type, difficulty, family: id, ...(model && id !== 'deepseek' ? { provider: id } : {}), model,
+      ...(model && settings.dispatch.models[model]?.effort ? { effort: settings.dispatch.models[model]!.effort } : {}),
+      harness, account: family.account, routeId: `${id}:${model || 'default'}`, degraded: false, reason: `${type}/${difficulty} → ${id}` }
   }
   const reason = selected.strict
     ? `${type}/${difficulty}: no configured family is available and the type is strict`
