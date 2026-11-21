@@ -191,3 +191,22 @@ Team Agent 里”。控制面方案也有自己的死法：
 
 一句话：**要拆的是执行路径，不是团队 Agent 的大脑。** 除非 IF.List Agent 变成独立
 产品，否则“一个控制面 + 两条执行 lane”比“两个自主 Agent”更快、更稳、更少重复。
+
+## 7. 已落地：`iflist-intake` 任务分类
+
+按上面的“拆执行、不拆大脑”，2026-11-21 已新增：
+
+| 配置 | 值 |
+|---|---|
+| dispatch type | `iflist-intake`（IF.List 建卡抽取） |
+| family | `cilai-default`，label `HY4 Flash`，harness `dsh` |
+| models S/M/L | `hy4-flash` / `hy4-flash` / `hy4-flash` |
+| model metadata | `effort: low` |
+| dispatch.enabled | 仍为 `false`（不改变 Worker 路由） |
+
+Source 的 `ctx.complete(prompt, 900, 'iflist-intake')` 用这个分类取
+`provider=cilai-default / model=hy4-flash / effort=low`；取不到才回退 eval 模型。
+它只做一次 completion，不创建 Worker Session。
+
+同时给抽取 prompt 加了最近 24h 工单；模型返回 `duplicate_of` 时直接回
+“这条已经在「标题」”，不再发重复卡。这样“快车道”也保留了判重，而不是绕开它。
