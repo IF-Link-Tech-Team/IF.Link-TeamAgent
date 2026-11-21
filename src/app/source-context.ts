@@ -26,6 +26,8 @@ export interface SourceContextDeps {
   receive(trigger: Trigger): ReceiveResult | Promise<ReceiveResult>
   /** Movement in the domain, maintained by the Runtime as events are emitted. */
   activity(): Activity
+  /** One bounded model completion for a Source's extraction prompt; no Session, no tools. */
+  complete?(prompt: string, maxTokens?: number): Promise<string>
 }
 
 /**
@@ -61,6 +63,7 @@ export function sourceContextOf(deps: SourceContextDeps, kind: { kind: string; h
       patch: (key, meta) => { store.threads.patchMeta(key, meta) },
     },
     activity: () => deps.activity(),
+    ...(deps.complete ? { complete: deps.complete } : {}),
     tickets: {
       get: id => store.tickets.get(id),
       open: () => store.tickets.open(),

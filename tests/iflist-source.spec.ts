@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { iflistKind, iflistTrigger, runIfList, sendIfList, type IfListConfig } from '../src/sources/iflist.ts'
 import type { SourceContext } from '../src/sources/host.ts'
 
-const config: IfListConfig = { pollSeconds: 1, directMessages: true, pageSize: 20 }
+const config: IfListConfig = { pollSeconds: 1, directMessages: true, pageSize: 20, directIntake: false }
 
 const item = (over: Partial<Record<string, unknown>> = {}) => ({
   seq: 1,
@@ -62,6 +62,47 @@ describe('IF.List Source', () => {
     })
     expect(state).toBe('sent')
     expect(calls[0]?.[1]).toEqual(['say', '--chat', 'oc_1', '--text', '建好了', '--reply', 'om_1'])
+  })
+
+  it('direct-intakes a natural DM with one model call and one propose command', async () => {
+    const calls: string[][] = []
+    let cursor: number | undefined
+    const controller = new AbortController()
+    const ctx = {
+      config: () => ({ ...config, directIntake: true }),
+      complete: async () => JSON.stringify({
+        title: '确定下一次 Meetup 的主题',
+        project: 'Meetup',
+        assignees: ['self'],
+        start: '2026-11-23',
+        due: '2026-11-25',
+        priority: 'high',
+        description: '围绕 team agent / deepseek harness 定下一次主题。',
+        confidence: 0.92,
+      }),
+      commands: (() => {
+        const run = async (_program: string, args: string[]): Promise<string> => {
+          calls.push(args)
+          if (args[0] === 'inbox') return JSON.stringify({ items: [item({ text: '在 Meetup 项目里定下一次主题，两天后开始，下周三截止，次高' })], next: 1 })
+          if (args[0] === 'project') return JSON.stringify({ projects: [{ identifier: 'MEETUP', name: 'Meetup' }] })
+          if (args[0] === 'workspace-people') return JSON.stringify({ members: [{ display_name: '梁宇凡', email: 'on_alice@feishu.iflink.tech' }] })
+          if (args[0] === 'task') { controller.abort(); return JSON.stringify({ ok: true }) }
+          return '{}'
+        }
+        return { run, withSignal: () => ({ run }) }
+      })(),
+      state: { get: () => cursor, set: (_key: string, value: number) => { cursor = value } },
+      receive: async () => { throw new Error('must not fall back to the Engine') },
+      report: () => undefined,
+    }
+    await runIfList(ctx as unknown as SourceContext, controller.signal)
+    expect(cursor).toBe(1)
+    const propose = calls.find(args => args[0] === 'task')!
+    expect(propose).toContain('--suppress-assignment-card')
+    expect(propose).toContain('--to')
+    expect(propose).toContain('on_alice')
+    expect(propose).toContain('--priority')
+    expect(propose).toContain('high')
   })
 
   it('pulls once, hands every message to the Engine, and advances the cursor', async () => {

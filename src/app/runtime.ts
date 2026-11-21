@@ -179,7 +179,22 @@ export class Runtime extends Service implements SourceHost {
       this.sourceDeps = { store, engine, outbox, commands, sources, get ready() { return runtime.ready },
         get deployment() { return setup.deployment }, configured: () => setup.configured(),
         get setupProblem() { return setup.problem }, get feishuProblem() { return setup.feishuProblem }, receive: trigger => passes.receive(trigger),
-        activity: () => activity }
+        activity: () => activity,
+        // A Source gets one bounded completion, not an Agent: extraction must not grow into a Worker.
+        complete: async (prompt, maxTokens = 700) => {
+          const model = store.settings().eval.model ?? runtime.router.preferred('main')
+          if (!model) throw new Error('No model configured for Source intake')
+          let text = ''
+          const stream = ctx.llm.stream({ provider: model.provider, model: model.model, maxTokens,
+            messages: [{ role: 'user', content: [{ type: 'text', text: prompt }] }] })
+          for await (const chunk of stream) {
+            if (chunk.type === 'text-delta') text += chunk.text
+            else if (chunk.type === 'finish' && chunk.reason.kind === 'error') {
+              throw new Error(`Source intake model failed: ${chunk.reason.failure.code}`)
+            }
+          }
+          return text
+        } }
       this.actions = new Actions({ engine, main: engine, store, requestPass: () => { this.passes.request() },
         quietly: run => { this.quiet++; try { return run() } finally { this.quiet-- } } })
       this.toolHost = { context: ctx, engine, store, prompts, sessions, settings: this.settings, assessor, resources, actions: this.actions,
