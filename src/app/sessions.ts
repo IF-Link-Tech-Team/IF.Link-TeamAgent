@@ -17,6 +17,7 @@ import { RetryHealth } from './retry-health.ts'
 import { initializeRoleModel } from './role-models.ts'
 import { bundledSkills } from './skill-files.ts'
 import { SKILL_PREFIX, type PromptVersion, type Prompts } from './prompts.ts'
+import { iflistIntakePrompt } from './context.ts'
 import type { Store } from './store/index.ts'
 import { KV } from '../kv.ts'
 import type { RegisterTool, Tool } from './tools/tool.ts'
@@ -25,7 +26,7 @@ import type { RegisterTool, Tool } from './tools/tool.ts'
 export interface SessionsDeps {
   /** DSH Cordis context: sessions, agents, persistence, and their events. */
   readonly context: Context
-  readonly store: Pick<Store, 'tickets' | 'settings' | 'get' | 'set' | 'keys'>
+  readonly store: Pick<Store, 'tickets' | 'triggers' | 'settings' | 'get' | 'set' | 'keys'>
   readonly prompts: Pick<Prompts, 'current' | 'version' | 'compose' | 'skills'>
   readonly effects: Pick<Effects, 'enqueue' | 'handle' | 'idle' | 'pending'>
   /** The `models` health entry, which reports managed sessions waiting on a model-budget retry. */
@@ -45,7 +46,7 @@ export interface SessionsDeps {
  * What Sessions registered for an agent it decorated: the releases of its prompt section, tools and skill scope, the scope
  * its skills are registered in, and the skills of one prompt revision; for a worker's subagent, only its tool limits.
  */
-interface SessionBinding { disposers: (() => void)[]; scope?: Context; skills?: { revision: number; dispose: () => void }; subagent?: true }
+interface SessionBinding { disposers: (() => void)[]; scope?: Context; skills?: { revision: number; dispose: () => void }; subagent?: true; ticketId?: string }
 
 /** The agent presets Executor Sessions and the main Session are created with, which the bundle's patch defines. */
 export const WORKER_PRESET = 'dsh-superagent-worker', MAIN_PRESET = 'dsh-superagent-router'
@@ -237,7 +238,7 @@ export class Sessions {
     const master = agent.id === host.mainSessionId
     const ticket = master ? undefined : this.ticketOf(agent)
     if (!master && !ticket) { this.limitSubagent(agent); return }
-    const binding: SessionBinding = { disposers: [] }
+    const binding: SessionBinding = { disposers: [], ...(ticket ? { ticketId: ticket.id } : {}) }
     this.bindings.set(agent, binding)
     this.retryHealth.restore(agent.id, agent.session.snapshotEvents())
     if (agent.status === 'idle') this.retryHealth.clear(agent.id)
@@ -247,7 +248,9 @@ export class Sessions {
       const version = this.promptFor(agent, context.signal !== undefined)
       const current = ticket && host.store.tickets.get(ticket.id)
       const composed = host.prompts.compose(version.config, master ? 'orchestrator' : 'worker', current ? host.environment(current) : undefined)
-      return `[dsh-superagent prompt revision ${version.revision}]\n${composed}\n${current ? mandateInstructions(current.mandate) : ''}`
+      const source = current ? this.sourceOfTicket(current.id) : undefined
+      const intake = source === 'iflist' ? `\n${iflistIntakePrompt}` : ''
+      return `[dsh-superagent prompt revision ${version.revision}]\n${composed}${intake}\n${current ? mandateInstructions(current.mandate) : ''}`
     }, ...(master ? { complete: true } : {}) }))
     // A recreated skill scope (e.g. after the skills service restarts) starts empty, so reset `binding.skills` before rebinding.
     const skillScope = agent.ctx.inject(['skills'], scope => {
@@ -291,7 +294,9 @@ export class Sessions {
   private workOnly(agent: Agent, ticketId: string): (() => void)[] {
     const store = this.host.store
     const parent = scopeParentOf(agent)
-    const allow = WORK_TOOLS.filter(name => agent.ctx.tools.get(name, parent))
+    // An IF.List ticket only converts a message into a work item; no file, web or task skills.
+    const names = this.sourceOfTicket(ticketId) === 'iflist' ? ['bash', 'skill'] : WORK_TOOLS
+    const allow = names.filter(name => agent.ctx.tools.get(name, parent))
     return [agent.ctx.tools.restrict({ allow }), agent.ctx.tools.guard(() => {
       const current = store.tickets.get(ticketId)
       return !current || !isOpen(current) ? 'Ticket ended; new work needs a new authorized ticket' : undefined
@@ -312,13 +317,20 @@ export class Sessions {
     if (ticketId === undefined || !this.host.store.tickets.get(ticketId)) return
     this.bindings.set(agent, { disposers: this.workOnly(agent, ticketId), subagent: true })
   }
+  /** The Source kind that produced a ticket's origin trigger. */
+  private sourceOfTicket(ticketId: string): string | undefined {
+    const ticket = this.host.store.tickets.get(ticketId)
+    return ticket ? this.host.store.triggers.get(ticket.origin.triggerId)?.source : undefined
+  }
   /** Register the skills of a prompt version in the agent's skill scope, in place of an earlier version's. */
   private bindSkills(binding: SessionBinding, version: PromptVersion): void {
     const { scope, skills: previous } = binding
     if (!scope || previous?.revision === version.revision) return
     previous?.dispose()
     const disposers: (() => void)[] = []
+    const taskOnly = binding.ticketId ? this.sourceOfTicket(binding.ticketId) === 'iflist' : false
     for (const [name, content] of this.host.prompts.skills(version.config)) {
+      if (taskOnly && name !== 'iflist') continue
       const bundled = name === 'feishu' || name === 'github' || name === 'iflist' ? bundledSkills[name] : undefined
       const body = version.config.skills[name] ?? ''
       const description = bundled?.description ?? (body.replace(/\s+/g, ' ').slice(0, 120) || 'Custom dsh-superagent operational skill.')

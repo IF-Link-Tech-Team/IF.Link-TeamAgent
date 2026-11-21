@@ -12,7 +12,7 @@ import { AcknowledgementSchema, readTool, tool, type Tool } from './tool.ts'
 
 export interface ExecutorToolsHost {
   readonly engine: Pick<EngineForExecutor, 'report' | 'reply' | 'markUnrelated' | 'handback' | 'followForContext'>
-  readonly store: Pick<Store, 'tickets' | 'replyStatus' | 'atomic'>
+  readonly store: Pick<Store, 'tickets' | 'triggers' | 'replyStatus' | 'atomic'>
   readonly sessions: Pick<Sessions, 'relay' | 'notify'>
   readonly resources: ResourceDeps
   /** GitHub Source context whose pull-request rules govern claiming a reported PR. */
@@ -95,7 +95,9 @@ export function executorTools(host: ExecutorToolsHost, ticket: Ticket): Tool[] {
             ...(args.reply_to_trigger_id ? { answers: args.reply_to_trigger_id } : {}) }
           const updated = host.engine.report(ticketId, report)
           const relay = reportRelay(updated, report)
-          if (relay) host.sessions.relay(relay.id, relay.text)
+          const source = host.store.triggers.get(updated.origin.triggerId)?.source
+          // IF.List ready is already confirmed by the card; no extra text to the person.
+          if (relay && !(source === 'iflist' && report.state === 'ready')) host.sessions.relay(relay.id, relay.text)
           const notification = relay ? 'orchestrator' : 'internal_only'
           return { reported: true, notification, ...(updated.attention ? { attention: updated.attention } : {}) }
         })
