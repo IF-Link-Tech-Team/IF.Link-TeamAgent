@@ -189,8 +189,8 @@ export function resetDirectoryCache(): void { directoryCache = undefined }
 let directNote = 'idle'
 
 /** A short project/person directory for the extraction prompt; cached because it changes rarely. */
-async function directory(ctx: SourceContext, signal: AbortSignal): Promise<{ text: string; projects: { identifier: string; name: string }[] }> {
-  if (directoryCache && Date.now() - directoryCache.at < 600_000) return directoryCache
+async function directory(ctx: SourceContext, signal: AbortSignal, refresh = false): Promise<{ text: string; projects: { identifier: string; name: string }[] }> {
+  if (!refresh && directoryCache && Date.now() - directoryCache.at < 600_000) return directoryCache
   try {
     const commands = ctx.commands.withSignal(signal)
     const projectOutput = JSON.parse(await commands.run(CLI, ['project', 'list'])) as {
@@ -270,7 +270,7 @@ async function directIntake(ctx: SourceContext, item: InboxItem, signal: AbortSi
     .slice(0, 5)
     .map(ticket => `- ${ticket.id} ${ticket.title}`)
     .join('\n') || '（无）'
-  const dir = await directory(ctx, signal)
+  let dir = await directory(ctx, signal)
   const prompt = `你是 IF.List 的任务解析器。把下面一条飞书私聊拆成一条待确认任务。
 今天：${today}（Asia/Shanghai，星期${'日一二三四五六'[new Date(`${today}T00:00:00Z`).getUTCDay()]}）。
 ${dir.text}
@@ -314,6 +314,8 @@ ${recent}
     directNote = `json: ${reason} | raw: ${text.replace(/\s+/g, ' ').slice(0, 140)}`.slice(0, 300)
     return 'failed'
   }
+  // A project created after the 10-minute cache is still valid; refresh once before asking.
+  if (parsed.project && !knownProject(parsed.project, dir.projects)) dir = await directory(ctx, signal, true)
   if (!knownProject(parsed.project, dir.projects)) {
     const trigger = iflistTrigger(item)
     const options = dir.projects.map((project) => `${project.identifier || project.name}`).filter(Boolean).join(' / ')
