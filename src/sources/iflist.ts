@@ -183,14 +183,13 @@ const DirectTaskSchema = z.object({
   duplicate_of: z.preprocess(text, z.string().optional()),
 })
 
-let directoryCache: { at: number; text: string; projects: { identifier: string; name: string }[] } | undefined
-/** Test hook: drop the cached project/person directory between cases. */
-export function resetDirectoryCache(): void { directoryCache = undefined }
+/** Kept for tests; the directory is now read fresh so a just-created project is visible immediately. */
+export function resetDirectoryCache(): void {}
 let directNote = 'idle'
 
-/** A short project/person directory for the extraction prompt; cached because it changes rarely. */
-async function directory(ctx: SourceContext, signal: AbortSignal, refresh = false): Promise<{ text: string; projects: { identifier: string; name: string }[] }> {
-  if (!refresh && directoryCache && Date.now() - directoryCache.at < 600_000) return directoryCache
+/** A short project/person directory for the extraction prompt; always fresh so new projects work immediately. */
+async function directory(ctx: SourceContext, signal: AbortSignal, _refresh = false): Promise<{ text: string; projects: { identifier: string; name: string }[] }> {
+  void _refresh
   try {
     const commands = ctx.commands.withSignal(signal)
     const projectOutput = JSON.parse(await commands.run(CLI, ['project', 'list'])) as {
@@ -212,8 +211,7 @@ async function directory(ctx: SourceContext, signal: AbortSignal, refresh = fals
       })
       .filter(Boolean).join('\n')
     const text = `项目（identifier 名称）：\n${projects}\n\n人员（姓名 union_id）：\n${people}`
-    directoryCache = { at: Date.now(), text, projects: projectList }
-    return directoryCache
+    return { text, projects: projectList }
   } catch {
     return { text: '', projects: [] }
   }
