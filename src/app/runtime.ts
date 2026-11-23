@@ -177,12 +177,13 @@ export class Runtime extends Service implements SourceHost {
       // After the engine: routing only needs the settings, the health board, the main Session id, and the DSH LLM service.
       this.router = new ModelRouter({ context: ctx, store, mainSessionId, health: board.claim('model-fallback') })
       const evaluateDue = () => { engine.evaluateDue(); evals.set(evalsHealth(store)) }
-      const passes = this.passes = new Passes({ engine: { receive: trigger => engine.receive(trigger), evaluateDue }, effects,
+      const passes = this.passes = new Passes({ engine: { receive: trigger => engine.receive(trigger),
+        receiveForTicket: (trigger, ticketId) => engine.receiveForTicket(trigger, ticketId), evaluateDue }, effects,
         health: this.runtimeHealth, lifetime: this.lifetime, configured: () => setup.configured(), closing: () => this.closing() })
       this.sourceDeps = { store, engine, outbox, commands, sources, get ready() { return runtime.ready },
         get deployment() { return setup.deployment }, configured: () => setup.configured(),
         get setupProblem() { return setup.problem }, get feishuProblem() { return setup.feishuProblem }, receive: trigger => passes.receive(trigger),
-        activity: () => activity,
+        receiveForTicket: (trigger, ticketId) => passes.receiveForTicket(trigger, ticketId), activity: () => activity,
         // A Source gets one bounded completion, not an Agent: extraction must not grow into a Worker.
         complete: async (prompt, maxTokens, taskType = 'iflist-intake') => {
           const routed = taskModel(store.settings(), taskType)

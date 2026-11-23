@@ -9,7 +9,7 @@
 # Usage:
 #   iflist-propose --ticket <id> --title "<action>" --project <IFLIST|DESIGNAI|...> \
 #     [--from on_xxx] [--chat oc_xxx] [--addressed direct|mention] [--date YYYY-MM-DD] \
-#     [--to-requester | --to <name|ou_|on_|uuid>] \
+#     [--to-requester | --to <name|ou_|on_|uuid>] [--invite "需拉进项目的人,姓名"] \
 #     [--start today|tomorrow|none|YYYY-MM-DD] [--due today|tomorrow|none|YYYY-MM-DD] \
 #     [--priority none|low|medium|high|urgent] [--why "<description>"] [--source <url>]
 set -euo pipefail
@@ -20,7 +20,7 @@ usage() {
 }
 
 ticket='' title='' project='' from='' chat='' addressed='' date=''
-to_requester=0 to='' start='' due='' priority='' why='' source=''
+to_requester=0 to='' invite='' start='' due='' priority='' why='' source=''
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --ticket) ticket="${2:-}"; shift 2 ;;
@@ -32,6 +32,7 @@ while [[ $# -gt 0 ]]; do
     --date) date="${2:-}"; shift 2 ;;
     --to-requester) to_requester=1; shift ;;
     --to) to="${2:-}"; shift 2 ;;
+    --invite) invite="${2:-}"; shift 2 ;;
     --start) start="${2:-}"; shift 2 ;;
     --due) due="${2:-}"; shift 2 ;;
     --priority) priority="${2:-}"; shift 2 ;;
@@ -70,6 +71,7 @@ if [[ $to_requester -eq 1 ]]; then
 elif [[ -n "$to" ]]; then
   cmd+=(--to "$to")
 fi
+[[ -n "$invite" ]] && cmd+=(--invite "$invite")
 if start_date=$(resolve_date "$start"); then cmd+=(--start "$start_date"); fi
 if due_date=$(resolve_date "$due"); then cmd+=(--due "$due_date"); fi
 [[ -n "$priority" ]] && cmd+=(--priority "$priority")

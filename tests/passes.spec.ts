@@ -6,7 +6,7 @@ import { HealthBoard } from '../src/infra/health.ts'
 
 function passes(closing = () => false) {
   const health = new HealthBoard().claim('runtime', { state: 'starting', detail: '' })
-  const engine = { receive: vi.fn(() => 'stored' as const), evaluateDue: vi.fn() }
+  const engine = { receive: vi.fn(() => 'stored' as const), receiveForTicket: vi.fn(() => 'stored' as const), evaluateDue: vi.fn() }
   const effects = { kick: vi.fn(), idle: vi.fn(async () => {}) }
   const value = new Passes({ engine, effects, health, lifetime: new AbortController().signal, configured: () => true, closing })
   return { passes: value, engine, effects, health }

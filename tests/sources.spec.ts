@@ -43,9 +43,12 @@ function host(overrides: Partial<SourceContextDeps> = {}) {
   const engine = new Engine({ repo: store, scope: sources, policy: () => settingsPolicy(store.settings(), sources), assessor, executor, outbox })
   const commands = new Commands(() => deployment, {}, new AbortController().signal)
   const receive = vi.fn(async (trigger: Trigger) => { const result = engine.receive(trigger); engine.evaluateDue(); return result })
+  const receiveForTicket = vi.fn(async (trigger: Trigger, ticketId: string) => {
+    const result = engine.receiveForTicket(trigger, ticketId); engine.evaluateDue(); return result
+  })
   // Record outbound messages in the store without sending them.
   const parts: SourceContextDeps = { store, engine, outbox: { send: message => { store.receipts.add(message) } }, commands, sources, deployment,
-    ready: Promise.resolve(), configured: () => true, receive, activity: () => ({}), ...overrides }
+    ready: Promise.resolve(), configured: () => true, receive, receiveForTicket, activity: () => ({}), ...overrides }
   // The Sources' functions take the context; plugin entries and kind callbacks take the host, which builds each kind's context.
   const value = { ...parts, context: (kind: { kind: string; health: readonly string[] }) => sourceContextOf(parts, kind) }
   const context = sourceContextOf(parts, { kind: 'feishu', health: ['github', 'feishu', 'history'] })
@@ -1278,7 +1281,8 @@ describe('feishu event consumer', () => {
     const commands = new Commands(() => deployment, {}, controller.signal)
     const deps: SourceContextDeps = { store, engine, outbox: { send: () => {} }, commands, sources, deployment, ready: Promise.resolve(), configured: () => true,
       activity: () => ({}),
-    receive: (trigger: Trigger) => engine.receive(trigger) }
+    receive: (trigger: Trigger) => engine.receive(trigger),
+    receiveForTicket: (trigger: Trigger, ticketId: string) => engine.receiveForTicket(trigger, ticketId) }
     const turnOff = () => store.saveSettings(SettingsSchema.parse({ sources: { feishu: { enabled: false, config: { chats: [] } } } }))
     return { ctx: sourceContextOf(deps, feishuKind), health, store, turnOff }
   }

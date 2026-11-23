@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 
-import { iflistKind, iflistTrigger, resetDirectoryCache, runIfList, sendIfList, type IfListConfig } from '../src/sources/iflist.ts'
+import { iflistCallbackTrigger, iflistKind, iflistTrigger, resetDirectoryCache, runIfList, sendIfList, type IfListConfig } from '../src/sources/iflist.ts'
 import type { SourceContext } from '../src/sources/host.ts'
 
 const config: IfListConfig = { pollSeconds: 1, directMessages: true, pageSize: 20, directIntake: false }
@@ -16,6 +16,41 @@ const item = (over: Partial<Record<string, unknown>> = {}) => ({
   at: '2026-11-20T08:00:00.000Z',
   ...over,
 })
+
+const callback = (over: Partial<Record<string, unknown>> = {}) => item({
+  kind: 'card_action',
+  messageId: 'card:p1:create:created:success:iss-1',
+  chatId: 'oc_origin',
+  chatType: 'group',
+  text: 'IF.List 卡片回调：整理报名表\n状态：created',
+  ticketId: 'a'.repeat(32),
+  proposalId: 'p1',
+  action: 'create',
+  proposalState: 'created',
+  outcome: 'success',
+  operatorOpenId: 'ou_alice',
+  operatorUnionId: 'on_alice',
+  issueId: 'iss-1',
+  ...over,
+})
+
+const origin = {
+  id: 'feishu:om_origin',
+  source: 'feishu',
+  threads: [{ source: 'feishu', id: 'oc_origin:om_origin' }],
+  actor: { source: 'feishu', id: 'ou_alice' },
+  human: true,
+  addressed: 'mention',
+  at: '2026-11-20T07:00:00.000Z',
+  text: '建一条任务',
+  channel: { source: 'feishu', thread: 'feishu:oc_origin:om_origin', address: { chatId: 'oc_origin', messageId: 'om_origin' } },
+  meta: {},
+}
+const ticket = { id: 'a'.repeat(32), origin: { triggerId: origin.id, triggerIds: [origin.id] } }
+const callbackContext = {
+  tickets: { get: (id: string) => id === ticket.id ? ticket : undefined },
+  triggers: { get: (id: string) => id === origin.id ? origin : undefined },
+}
 
 describe('IF.List Source', () => {
   beforeEach(() => resetDirectoryCache())
@@ -50,6 +85,8 @@ describe('IF.List Source', () => {
     expect(iflistKind.scope!({ meta: { direct: true } }, { ...config, directMessages: false }))
       .toMatchObject({ listened: false, reason: 'direct_messages_not_allowed' })
     expect(iflistKind.scope!({ meta: { direct: false } }, config)).toMatchObject({ listened: true, row: 'group' })
+    expect(iflistKind.scope!({ meta: { direct: true, kind: 'card_action' } }, { ...config, directMessages: false }))
+      .toMatchObject({ listened: true, row: 'group' })
   })
 
   it('replies through the IF.List bot, under the message that started the thread', async () => {
@@ -167,6 +204,46 @@ describe('IF.List Source', () => {
     await runIfList(ctx as unknown as SourceContext, controller.signal)
     expect(notes[0]?.text).toContain('完成 Design Agent 需求文档')
     expect(notes[0]?.text).toContain('没有重复建单')
+  })
+
+  it('maps a card result to the original Feishu thread without making it a new addressed request', () => {
+    const trigger = iflistCallbackTrigger(callback() as never, callbackContext as never)
+    expect(trigger?.threads).toEqual(origin.threads)
+    expect(trigger?.channel?.thread).toBe('feishu:oc_origin:om_origin')
+    expect(trigger?.channel?.address).toEqual({ chatId: 'oc_origin', messageId: 'om_origin', direct: 'false' })
+    expect(trigger?.human).toBe(true)
+    expect(trigger?.addressed).toBeUndefined()
+    expect(trigger?.meta).toMatchObject({ kind: 'card_action', ticketId: ticket.id, proposalId: 'p1', issueId: 'iss-1' })
+  })
+
+  it('does not invent a conversation for direct-intake cards that have no Team Agent ticket', () => {
+    expect(iflistCallbackTrigger(callback({ ticketId: 'iflist-direct:om_1' }) as never, callbackContext as never)).toBeUndefined()
+  })
+
+  it('delivers a card result only to its ticket, bypasses direct intake, and advances the cursor', async () => {
+    const received: { trigger: { id: string; meta: Record<string, unknown> }; ticketId: string }[] = []
+    let cursor: number | undefined
+    const controller = new AbortController()
+    const ctx = {
+      config: () => ({ ...config, directIntake: true }),
+      commands: { withSignal: () => ({ run: async () => JSON.stringify({ items: [callback()], next: 1 }) }) },
+      state: { get: () => cursor, set: (_key: string, value: number) => { cursor = value } },
+      tickets: callbackContext.tickets,
+      triggers: callbackContext.triggers,
+      complete: async () => { throw new Error('card callbacks must not be extracted as messages') },
+      receiveForTicket: async (trigger: { id: string; meta: Record<string, unknown> }, ticketId: string) => {
+        received.push({ trigger, ticketId })
+        controller.abort()
+        return 'stored'
+      },
+      receive: async () => { throw new Error('must not fan out or queue an Eval') },
+      report: () => undefined,
+    }
+    await runIfList(ctx as unknown as SourceContext, controller.signal)
+    expect(cursor).toBe(1)
+    expect(received).toHaveLength(1)
+    expect(received[0]?.ticketId).toBe(ticket.id)
+    expect(received[0]?.trigger.meta.kind).toBe('card_action')
   })
 
   it('pulls once, hands every message to the Engine, and advances the cursor', async () => {

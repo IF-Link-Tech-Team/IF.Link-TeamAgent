@@ -20,6 +20,7 @@ iflist-propose \
   --from "<trigger.from>" --chat "<trigger.chat>" --addressed "<trigger.addressed>" \
   --date "<trigger.date>" \
   --to "<names or ids, comma-separated; omit if unknown>" \
+  --invite "<people to add to the project, comma-separated; optional>" \
   --start today|tomorrow|YYYY-MM-DD|none --due YYYY-MM-DD|none \
   --priority none|low|medium|high|urgent \
   --why "<1–3 sentences of context; include the source link if present>"
@@ -34,6 +35,8 @@ It fills owner/chat/direct/date and runs `iflist task propose --form` once. Do *
 - **Project**: the project named or clearly implied; if genuinely unclear, leave the card for the person.
 - **Assignees**: zero/one/several project people. Use `self`/the requester only for “我要/我来/帮我”;
   use named people when named; otherwise omit. Never add extra people by default.
+- **Project invitees**: only people explicitly asked to join the project; pass `--invite`. They are not assignees
+  unless also selected as such. The card keeps this as free text, and confirmation adds logged-in people best-effort.
 - **Start / due**: only stated dates; due >= start. “今天/明天/两天后/下周三” are relative to
   `trigger.date` (Asia/Shanghai).
 - **Priority**: only stated; 次高=high, 最高/紧急=urgent, 中等=medium, 低=low.

@@ -41,6 +41,26 @@ const InboxItemSchema = z.object({
   unionId: z.string().optional(),
   text: z.string().default(''),
   addressed: z.enum(['mention', 'direct']).default('direct'),
+  kind: z.enum(['message', 'card_action']).default('message'),
+  ticketId: z.string().optional(),
+  proposalId: z.string().optional(),
+  action: z.string().optional(),
+  proposalState: z.string().optional(),
+  outcome: z.string().optional(),
+  title: z.string().optional(),
+  projectLabel: z.string().optional(),
+  issueId: z.string().optional(),
+  issueSequence: z.number().optional(),
+  deepLink: z.string().optional(),
+  operatorOpenId: z.string().optional(),
+  operatorUnionId: z.string().optional(),
+  memberAdds: z.array(z.object({
+    name: z.string(),
+    planeUserId: z.string().optional(),
+    openId: z.string().optional(),
+    status: z.string(),
+    message: z.string().optional(),
+  }).strict()).optional(),
   at: z.string(),
 })
 type InboxItem = z.infer<typeof InboxItemSchema>
@@ -70,6 +90,42 @@ export function iflistTrigger(item: InboxItem): Trigger {
     channel: { source: SOURCE, thread: threadId, address: { chatId: item.chatId, messageId: item.messageId, direct: String(direct) } },
     meta: { chatId: item.chatId, messageId: item.messageId, direct, thread: threadId,
       ...(item.unionId ? { unionId: item.unionId } : {}) },
+  }
+}
+
+/**
+ * A confirmed card is a result for one existing ticket, not a new message. Reuse the origin Trigger's Threads so
+ * the worker sees it in the original conversation, while the IF.List channel still carries the original chat id.
+ * Unknown synthetic ticket ids (the direct-intake fast lane has no Team Agent ticket) deliberately return undefined.
+ */
+export function iflistCallbackTrigger(item: InboxItem, ctx: Pick<SourceContext, 'tickets' | 'triggers'>): Trigger | undefined {
+  if (item.kind !== 'card_action' || !item.ticketId) return undefined
+  const ticket = ctx.tickets.get(item.ticketId)
+  const origin = ticket ? ctx.triggers.get(ticket.origin.triggerId) : undefined
+  if (!ticket || !origin || origin.threads.length === 0) return undefined
+  const threads = origin.threads
+  const direct = item.chatType === 'p2p'
+  const operator = item.operatorUnionId ?? item.operatorOpenId
+  return {
+    id: `${SOURCE}:card:${item.messageId}`,
+    source: SOURCE,
+    threads,
+    actor: { source: SOURCE, id: operator ?? origin.actor.id },
+    // IF.List already checked the card owner. This records a person's confirmation, never a new addressed request.
+    human: Boolean(operator),
+    at: item.at,
+    text: item.text,
+    channel: {
+      source: SOURCE,
+      thread: `${threads[0]!.source}:${threads[0]!.id}`,
+      address: { chatId: item.chatId, messageId: origin.channel?.address.messageId ?? item.messageId, direct: String(direct) },
+    },
+    meta: {
+      kind: 'card_action', chatId: item.chatId, messageId: item.messageId, direct, ticketId: item.ticketId,
+      proposalId: item.proposalId, action: item.action, proposalState: item.proposalState, outcome: item.outcome,
+      title: item.title, projectLabel: item.projectLabel, issueId: item.issueId, issueSequence: item.issueSequence,
+      deepLink: item.deepLink, operatorOpenId: item.operatorOpenId, operatorUnionId: item.operatorUnionId, memberAdds: item.memberAdds,
+    },
   }
 }
 
@@ -108,6 +164,8 @@ export const iflistKind: SourceKind<IfListConfig> = {
   ],
   health: ['iflist'],
   scope({ meta }, config) {
+    // A card result belongs to an existing ticket; turning off new direct messages must not drop it.
+    if (meta.kind === 'card_action') return { listened: true, observed: false, row: 'group' }
     if (meta.direct === true) return config.directMessages ? { listened: true, observed: false, row: 'direct' } : { listened: false, reason: 'direct_messages_not_allowed' }
     return { listened: true, observed: false, row: 'group' }
   },
@@ -376,6 +434,13 @@ export async function runIfList(ctx: SourceContext, signal: AbortSignal): Promis
       try {
         const page = await pull(ctx.commands.withSignal(signal), config, after)
         for (const item of page.items) {
+          if (item.kind === 'card_action') {
+            const trigger = iflistCallbackTrigger(item, ctx)
+            if (trigger && item.ticketId) await ctx.receiveForTicket(trigger, item.ticketId)
+            // 没有对应 Team Agent 工单的直通卡只更新 IF.List 卡片，不能凭回调新建工单。
+            after = item.seq
+            continue
+          }
           // 先做一次有界的结构化抽取；成功就只发一张预填卡，失败才交给 main/Worker。
           const addressed = item.chatType === 'p2p' || item.addressed === 'mention'
           if (config.directIntake && addressed) {

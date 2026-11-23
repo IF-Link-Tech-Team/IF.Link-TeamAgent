@@ -24,6 +24,8 @@ export interface SourceContextDeps {
   readonly feishuProblem?: SetupProblem | undefined
   /** Hands a Trigger to the Engine and schedules the pass that assesses it. */
   receive(trigger: Trigger): ReceiveResult | Promise<ReceiveResult>
+  /** Delivers a trusted Source result only to its existing ticket. */
+  receiveForTicket(trigger: Trigger, ticketId: string): ReceiveResult | Promise<ReceiveResult>
   /** Movement in the domain, maintained by the Runtime as events are emitted. */
   activity(): Activity
   /** One bounded model completion for a Source's extraction prompt; no Session, no tools. */
@@ -48,6 +50,7 @@ export function sourceContextOf(deps: SourceContextDeps, kind: { kind: string; h
       return instance?.enabled ? instance.config : undefined
     },
     receive: trigger => deps.receive(trigger),
+    receiveForTicket: (trigger, ticketId) => deps.receiveForTicket(trigger, ticketId),
     atomic: work => store.atomic(work),
     // `policyPart` types its result as the shape every kind shares, so the Feishu-only `bots` list is read here.
     policyBots: () => (deps.sources.policyPart(kind.kind) as { bots?: { id: string; name?: string }[] } | undefined)?.bots ?? [],

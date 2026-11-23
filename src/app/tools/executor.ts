@@ -96,8 +96,10 @@ export function executorTools(host: ExecutorToolsHost, ticket: Ticket): Tool[] {
           const updated = host.engine.report(ticketId, report)
           const relay = reportRelay(updated, report)
           const source = host.store.triggers.get(updated.origin.triggerId)?.source
+          const latestTriggerId = updated.inputs.filter(input => input.kind === 'trigger').at(-1)?.triggerId
+          const cardResult = latestTriggerId ? host.store.triggers.get(latestTriggerId)?.meta.kind === 'card_action' : false
           // IF.List ready is already confirmed by the card; no extra text to the person.
-          if (relay && !(source === 'iflist' && report.state === 'ready')) host.sessions.relay(relay.id, relay.text)
+          if (relay && !((source === 'iflist' || cardResult) && report.state === 'ready')) host.sessions.relay(relay.id, relay.text)
           const notification = relay ? 'orchestrator' : 'internal_only'
           return { reported: true, notification, ...(updated.attention ? { attention: updated.attention } : {}) }
         })
