@@ -318,6 +318,8 @@ async function directIntake(ctx: SourceContext, item: InboxItem, signal: AbortSi
   if (group && item.addressed !== 'mention') return 'skip'
   // 不是任务的消息（谢谢、你好、纯讨论）不值得一次模型调用；交给 main/Worker 的既有判断。
   if (!/(新建|创建|建个?|做|整理|安排|提醒|完成|开始|截止|项目|工作项|任务|帮|需要|要)/.test(item.text)) return 'skip'
+  // 项目/周期/模块属于 Plane 管理操作，不是“一句话建工作项”；交给 main/Worker 用 iflist 管理命令处理。
+  if (/(创建|新建|建)\s*(一个|个)?\s*(项目|周期|模块)/.test(item.text)) return 'skip'
   const requester = item.unionId ?? item.openId
   if (!requester) return 'failed'
   const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(new Date())

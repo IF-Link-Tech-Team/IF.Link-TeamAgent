@@ -44,6 +44,14 @@ It fills owner/chat/direct/date and runs `iflist task propose --form` once. Do *
   implementation steps or requirements.
 - **Source**: when `trigger.source_url` exists, pass `--source "<url>"` so the Plane item links back.
 
+## Administrative requests
+
+Only when a person explicitly asks to **create a project, cycle or module**, not as an execution task:
+use `project create`, `cycle create` or `module create` above, then report the created id/name once.
+Do not turn the admin request into a work-item card. After creating it, send one short result with
+`iflist say --chat "<trigger.chat>" --text "..."`. For read-only status use `project summary`,
+`cycle list` or `module list`.
+
 ## Boundaries
 
 - The card is the confirmation. Do not send an additional “建好了/收到” text after creating it.
