@@ -337,9 +337,13 @@ ${dir.text}
 ${recent}
 
 只输出 JSON，不要 markdown、不要解释。字段：
-{"title":"动作型标题（<=60字）","project":"项目 identifier 或名称","assignees":["self" 或姓名],"start":"YYYY-MM-DD"|null,"due":"YYYY-MM-DD"|null,"priority":"none|low|medium|high|urgent","description":"清晰、简洁的简介，保留链接和事实，不添加新事实","confidence":0到1,"duplicate_of":"已有工单 id"|null}
+{"title":"动作/结果型标题，最多60字","project":"项目 identifier 或名称","assignees":["self" 或姓名],"start":"YYYY-MM-DD"|null,"due":"YYYY-MM-DD"|null,"priority":"none|low|medium|high|urgent","description":"标题之外的上下文、范围、约束、链接；可适度澄清，但不执行任务、不写计划、不重复标题","confidence":0到1,"duplicate_of":"已有工单 id"|null}
 
 规则：
+- title 只写这项工作是什么/要达成什么；不要把日期、负责人、优先级、项目名、链接、理由或括号解释放进标题。
+- description 只写标题里没有的信息：上下文、范围、约束、来源链接，以及一两句澄清模糊指代的话。
+  只补消息或上下文里显然的信息，不执行任务、不写实施计划、不编造验收标准，也不要重复标题；
+  如果没有额外信息就留空字符串。
 - 用户说“我要/我来/帮我”时 assignees=["self"]；点名别人就用姓名；不确定就空数组，不要猜。
 - “次高”=high，“最高/紧急”=urgent，“中等”=medium，“低”=low；没说=none。
 - “今天/明天/两天后/下周三/本周日/无截止”等按上面的今天和日历周计算。

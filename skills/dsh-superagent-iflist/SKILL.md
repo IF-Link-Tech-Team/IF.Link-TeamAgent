@@ -31,7 +31,8 @@ It fills owner/chat/direct/date and runs `iflist task propose --form` once. Do *
 
 ## Fields
 
-- **Title**: summarize the whole sentence as one actionable work item; short, no plan, no “我要”.
+- **Title**: summarize what the work item is, as a short action/outcome. Keep out dates, people, priority,
+  project name, links, rationale and parenthetical explanations; no plan, no “我要”.
 - **Project**: the project named or clearly implied; if genuinely unclear, leave the card for the person.
 - **Assignees**: zero/one/several project people. Use `self`/the requester only for “我要/我来/帮我”;
   use named people when named; otherwise omit. Never add extra people by default.
@@ -40,9 +41,12 @@ It fills owner/chat/direct/date and runs `iflist task propose --form` once. Do *
 - **Start / due**: only stated dates; due >= start. “今天/明天/两天后/下周三” are relative to
   `trigger.date` (Asia/Shanghai).
 - **Priority**: only stated; 次高=high, 最高/紧急=urgent, 中等=medium, 低=low.
-- **Description**: context + constraints + links from the message. Do not invent acceptance criteria,
-  implementation steps or requirements.
+- **Description**: only the details that do not belong in the title: context, scope/constraints, source link,
+  and one or two sentences clarifying an ambiguous reference. Fill only what is obvious from the message or
+  thread; never plan the work, invent acceptance criteria, or repeat the title. Omit it if there is nothing
+  beyond the title.
 - **Source**: when `trigger.source_url` exists, pass `--source "<url>"` so the Plane item links back.
+- **Detail is not a second title**: if the description would only paraphrase the title, leave it empty.
 
 ## Administrative requests
 
