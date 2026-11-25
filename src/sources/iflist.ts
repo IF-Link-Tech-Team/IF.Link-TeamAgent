@@ -460,8 +460,11 @@ export async function runIfList(ctx: SourceContext, signal: AbortSignal): Promis
             if (outcome === 'failed') {
               // 任务管理失败时不回退 Worker：只问一句，避免把“建卡”变成“执行任务”。
               const trigger = iflistTrigger(item)
+              const limited = /429|rate.?limit/i.test(directNote)
               ctx.notify({ id: `direct-failed:${item.messageId}`, channel: trigger.channel!, kind: 'reply',
-                text: '这条我暂时没能整理成工作项。请补充“项目 / 负责人 / 开始或截止时间”后重发。' })
+                text: limited
+                  ? '这项工作项已经识别出来，但飞书接口正在限流，卡片暂时没发出去。请稍后重发。'
+                  : '这条我暂时没能整理成工作项。请补充“项目 / 负责人 / 开始或截止时间”后重发。' })
               continue
             }
             // 'skip'：不是任务（闲聊/感谢），仍交给 Team Agent 的既有判断。
