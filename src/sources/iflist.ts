@@ -401,12 +401,16 @@ ${recent}
     return 'failed'
   }
 
+  // Do not fall back to the raw message as the description: it duplicates the request and
+  // makes an Agent-parsed card look like a regex dump. Empty detail is a valid detail.
+  const detail = parsed.description?.trim();
+  const why = detail && detail !== parsed.title.trim() ? detail : undefined
   const args = ['task', 'propose', '--ticket', `iflist-direct:${item.messageId}`, '--title', parsed.title,
     '--project', parsed.project, '--chat', item.chatId, '--direct', group ? 'false' : 'true', '--owner', requester,
     '--form', '--suppress-assignment-card', '--key', `direct:${item.messageId}`,
     ...(parsed.start ? ['--start', parsed.start] : []), ...(parsed.due ? ['--due', parsed.due] : []),
     ...(parsed.priority !== 'none' ? ['--priority', parsed.priority] : []),
-    '--why', parsed.description || item.text]
+    ...(why ? ['--why', why] : [])]
   const assignees = parsed.assignees.map((value) => value === 'self' || value === '我' ? requester : value)
   if (assignees.length > 0) args.push('--to', assignees.join(','))
   try {

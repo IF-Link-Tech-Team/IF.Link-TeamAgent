@@ -152,7 +152,7 @@ describe('IF.List Source', () => {
     const ctx = {
       config: () => ({ ...config, directIntake: true }),
       complete: async () => JSON.stringify({ title: '写需求文档', project: 'Design Agent', assignees: ['self'],
-        start: '2026-11-21', due: '2026-11-27', priority: 'high', description: '下周五前完成。', confidence: 0.9 }),
+        start: '2026-11-21', due: '2026-11-27', priority: 'high', description: '', confidence: 0.9 }),
       commands: (() => {
         const run = async (_program: string, args: string[]): Promise<string> => {
           calls.push(args)
@@ -175,6 +175,7 @@ describe('IF.List Source', () => {
     expect(propose).toContain('--direct')
     expect(propose[propose.indexOf('--direct') + 1]).toBe('false')
     expect(propose[propose.indexOf('--chat') + 1]).toBe('oc_group')
+    expect(propose).not.toContain('--why')
   })
 
 
