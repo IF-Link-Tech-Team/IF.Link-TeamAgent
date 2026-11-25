@@ -46,6 +46,8 @@ export interface SourceContext {
   config<C extends Record<string, unknown>>(kind: string): C | undefined
   /** Ingests a trigger into the Engine and schedules the next evaluation pass; callers should await completion before advancing read cursors. */
   receive(trigger: Trigger): ReceiveResult | Promise<ReceiveResult>
+  /** Delivers a trusted result only to the existing ticket it names; never creates an Eval or wakes sibling tickets. */
+  receiveForTicket(trigger: Trigger, ticketId: string): ReceiveResult | Promise<ReceiveResult>
   atomic<T>(work: () => T): T
   /** Source-scoped KV records (such as read cursors); setting `undefined` removes an entry. */
   state: { get<V>(key: Key<V>): V | undefined; set<V>(key: Key<V>, value: V | undefined): void; keys<V>(family: Family<V, never>): Key<V>[] }
@@ -60,6 +62,8 @@ export interface SourceContext {
   }
   /** Movement in the domain since this process started, for a Source that schedules its own work. */
   activity(): Activity
+  /** One bounded model completion without an Agent session or tools; Sources use it for deterministic extraction. */
+  complete?(prompt: string, maxTokens?: number, taskType?: string): Promise<string>
   tickets: {
     get(id: string): Ticket | undefined
     /** Open tickets, newest first. */

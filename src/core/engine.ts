@@ -47,6 +47,14 @@ export class Engine {
    */
   receive(trigger: Trigger): ReceiveResult { return this.repo.atomic(() => this.intake.receive(trigger)) }
   /**
+   * A trusted Source's result for one existing ticket, such as a confirmed IF.List card. It is stored on the
+   * ticket's original Threads but never fans out to sibling tickets or starts an Eval when no ticket takes it.
+   * The usual resume rules still apply: a person's action may resume an ended ticket, never one a person stopped.
+   */
+  receiveForTicket(trigger: Trigger, ticketId: string): ReceiveResult {
+    return this.repo.atomic(() => this.intake.receive(trigger, ticketId))
+  }
+  /**
    * A Source's request to make an open ticket follow one of its Threads, such as a pull request's, `own` when the ticket
    * opened it: the ticket subscribes to it, and a ready report ends it only once `followsDone` holds (see `Tickets.followsDone`).
    * @throws UserError when the ticket is unknown or has ended.
@@ -259,7 +267,7 @@ export class Engine {
 }
 
 /** What Sources ask and tell the Engine. */
-export type EngineForSources = Pick<Engine, 'receive' | 'bindThread' | 'threadClosed'>
+export type EngineForSources = Pick<Engine, 'receive' | 'receiveForTicket' | 'bindThread' | 'threadClosed'>
 /** What the main Session asks of the Engine. */
 export type EngineForMainSession = Pick<Engine, 'candidate' | 'candidateReached' | 'decide' | 'attach' | 'reply' | 'requestStatus' | 'note'>
 /** What people ask of the Engine, through the panel or the main Session. */

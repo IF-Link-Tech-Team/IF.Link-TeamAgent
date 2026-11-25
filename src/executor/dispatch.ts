@@ -32,7 +32,8 @@ export class DispatchExecutor implements Executor {
     const route = chooseRoute(this.host.store.settings(), { type: outcome.type, difficulty: outcome.difficulty, needs: outcome.needs,
       labels: outcome.rules, source: trigger?.source, chat: trigger?.channel?.thread, text: trigger?.text })
     return { ...base, execution: { ...base.execution!, type: route.type, difficulty: route.difficulty, family: route.family,
-      runtime: route.harness, model: route.model, routeId: route.routeId } }
+      ...(route.provider ? { provider: route.provider } : {}), runtime: route.harness, model: route.model,
+      ...(route.effort ? { effort: route.effort } : {}), routeId: route.routeId } }
   }
 
   /** Registers the one pair of effect handlers both runtimes share, and starts the DSH event listeners. */

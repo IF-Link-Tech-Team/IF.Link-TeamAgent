@@ -1,6 +1,7 @@
 /** Application composition root and lifecycle manager for dsh-superagent. */
 import { Service, type Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
+import type { MessageId } from '@deepseek-ai/dsh-llm'
 import type { SessionId } from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-api-session-controller'
 import type {} from '@deepseek-ai/dsh-session-persistence'
@@ -48,10 +49,12 @@ import { Setup } from './setup.ts'
 import { feishuSettings } from '../sources/feishu.ts'
 import { health, type Health, type SourceContext, type SourceHost } from '../sources/host.ts'
 import type { HealthEntry } from '../infra/health.ts'
+import { ReasoningEffortId } from '@deepseek-ai/dsh-llm'
 import { Sessions } from './sessions.ts'
 import { ModelRouter } from './model-router.ts'
 import { Settings } from './settings.ts'
 import { sourceContextOf, type SourceContextDeps } from './source-context.ts'
+import { taskModel } from './dispatch.ts'
 import type { ResourceDeps } from './resources.ts'
 import { mainTools, type MainToolsHost } from './tools/main.ts'
 import { executorTools, type ExecutorToolsHost } from './tools/executor.ts'
@@ -174,12 +177,78 @@ export class Runtime extends Service implements SourceHost {
       // After the engine: routing only needs the settings, the health board, the main Session id, and the DSH LLM service.
       this.router = new ModelRouter({ context: ctx, store, mainSessionId, health: board.claim('model-fallback') })
       const evaluateDue = () => { engine.evaluateDue(); evals.set(evalsHealth(store)) }
-      const passes = this.passes = new Passes({ engine: { receive: trigger => engine.receive(trigger), evaluateDue }, effects,
+      const passes = this.passes = new Passes({ engine: { receive: trigger => engine.receive(trigger),
+        receiveForTicket: (trigger, ticketId) => engine.receiveForTicket(trigger, ticketId), evaluateDue }, effects,
         health: this.runtimeHealth, lifetime: this.lifetime, configured: () => setup.configured(), closing: () => this.closing() })
       this.sourceDeps = { store, engine, outbox, commands, sources, get ready() { return runtime.ready },
         get deployment() { return setup.deployment }, configured: () => setup.configured(),
         get setupProblem() { return setup.problem }, get feishuProblem() { return setup.feishuProblem }, receive: trigger => passes.receive(trigger),
-        activity: () => activity }
+        receiveForTicket: (trigger, ticketId) => passes.receiveForTicket(trigger, ticketId), activity: () => activity,
+        // A Source gets one bounded completion, not an Agent: extraction must not grow into a Worker.
+        complete: async (prompt, maxTokens, taskType = 'iflist-intake') => {
+          const routed = taskModel(store.settings(), taskType)
+          const fallback = store.settings().eval.model ?? runtime.router.preferred('main')
+          const provider = routed?.provider ?? fallback?.provider
+          const model = routed?.model ?? fallback?.model
+          if (!provider || !model) throw new Error('No model configured for Source intake')
+
+          // The DSH streaming adapter adds ~20s to this provider in practice; the same gateway
+          // answers a one-shot completion in ~2s. Use the gateway directly for intake only, and
+          // fall back to the DSH stream if the direct call fails.
+          const key = process.env.CILAI_DEFAULT_API_KEY
+          if (routed && provider === 'cilai-default' && key) {
+            try {
+              const base = (process.env.IFLIST_INTAKE_API_URL || 'https://token.iflink.tech/v1').replace(/\/$/, '')
+              const response = await fetch(`${base}/chat/completions`, {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  model,
+                  messages: [
+                    { role: 'system', content: 'You are a strict JSON extraction engine. Return exactly one JSON object. Never explain, never reason, never use markdown.' },
+                    { role: 'user', content: prompt },
+                  ],
+                  ...(routed.effort && routed.effort !== 'off' ? { reasoning_effort: routed.effort } : {}),
+                  ...(maxTokens === undefined ? {} : { max_tokens: maxTokens }),
+                }),
+                signal: AbortSignal.timeout(20_000),
+              })
+              if (!response.ok) throw new Error(`intake gateway HTTP ${response.status}`)
+              const data = await response.json() as { choices?: { message?: { content?: string } }[] }
+              const content = data.choices?.[0]?.message?.content?.trim()
+              if (content) return content
+              throw new Error('intake gateway returned empty content')
+            } catch (error) {
+              ctx.logger.warn('iflist intake gateway failed, trying DSH stream: %s', String(error))
+            }
+          }
+          let text = ''
+          let reasoning = ''
+          let finish = ''
+          const stream = ctx.llm.stream({ provider, model,
+            // No maxTokens here: an explicit cap can truncate the JSON (or be spent on reasoning).
+            ...(maxTokens === undefined ? {} : { maxTokens }),
+            // 'off' is an absence in the OpenAI-compatible API; sending it explicitly makes
+            // some gateways retry. Omit it instead of forcing a null reasoning parameter.
+            ...(routed?.effort && routed.effort !== 'off' ? { reasoningEffort: ReasoningEffortId(routed.effort) } : {}),
+            // Use a system-role message, not only the one-shot `system` field: the provider adapter
+            // honours it consistently and hy4-flash otherwise spends its whole budget on reasoning.
+            messages: [
+              { role: 'system', id: 'source-intake-system' as MessageId, source: { kind: 'system-prompt' as const }, content: [{ type: 'text' as const, text: 'You are a strict JSON extraction engine. Return exactly one JSON object. Never explain, never reason, never use markdown.' }] },
+              { role: 'user', content: [{ type: 'text', text: prompt }] },
+            ] })
+          for await (const chunk of stream) {
+            if (chunk.type === 'text-delta') text += chunk.text
+            else if (chunk.type === 'reasoning-delta') reasoning += chunk.text
+            else if (chunk.type === 'block-end' && chunk.block.type === 'text' && !text) text = chunk.block.text
+            else if (chunk.type === 'finish') {
+              finish = chunk.reason.kind
+              if (chunk.reason.kind === 'error') throw new Error(`Source intake model failed: ${chunk.reason.failure.code}`)
+            }
+          }
+          if (!text.trim()) throw new Error(`Source intake returned empty text (${finish || 'no finish'}, reasoning ${reasoning.length} chars)`)
+          return text
+        } }
       this.actions = new Actions({ engine, main: engine, store, requestPass: () => { this.passes.request() },
         quietly: run => { this.quiet++; try { return run() } finally { this.quiet-- } } })
       this.toolHost = { context: ctx, engine, store, prompts, sessions, settings: this.settings, assessor, resources, actions: this.actions,

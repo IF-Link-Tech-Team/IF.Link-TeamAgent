@@ -346,7 +346,11 @@ export interface Execution {
   family?: string
   runtime?: string
   routeId?: string
+  /** Provider for a DSH Worker model override (family id = provider id). */
+  provider?: string
   model?: string
+  /** Reasoning effort for the provider, when the route set one. */
+  effort?: string
   /** The runtime's own session id, used to resume it after a restart. */
   nativeSessionId?: string
   /** A path relative to the ticket directory holding the runtime's NDJSON transcript. */

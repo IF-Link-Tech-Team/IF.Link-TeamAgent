@@ -210,6 +210,24 @@ describe('subscription fan-out', () => {
     h.engine.receive(trigger('3', { human: false })); h.pump()
     expect(h.repo.decisions.byThread('chat:t1').at(-1)).toMatchObject({ kind: 'ignore', triggerIds: ['3'] })
   })
+  it('delivers a trusted card result only to its named ticket and never queues an Eval', () => {
+    const h = harness()
+    const first = accepted(h).ticketId!
+    const second = accepted(h, '2', 't2').ticketId!
+    h.engine.bindThread(first, { source: 'chat', id: 't2' }, false)
+    const requests = h.requests.length
+    const result = trigger('3', { source: 'iflist', threads: [{ source: 'chat', id: 't2' }], meta: { kind: 'card_action' } })
+    expect(h.engine.receiveForTicket(result, second)).toBe('stored')
+    expect(h.repo.tickets.get(first)!.inputs.some(input => input.kind === 'trigger' && input.triggerId === '3')).toBe(false)
+    expect(h.repo.tickets.get(second)!.inputs.some(input => input.kind === 'trigger' && input.triggerId === '3')).toBe(true)
+    expect(h.repo.triggers.disposition('3')?.fanout).toEqual([second])
+    h.pump()
+    expect(h.requests).toHaveLength(requests)
+    expect(h.repo.threads.get('chat:t2')?.pending).toEqual([])
+    expect(h.engine.receiveForTicket(trigger('4', { source: 'iflist', threads: [{ source: 'chat', id: 't2' }] }), 'missing')).toBe('stored')
+    h.pump()
+    expect(h.requests).toHaveLength(requests)
+  })
   it('keeps inputs undelivered until an assignment is running, and asks to launch one whose launch failed again', () => {
     const h = harness()
     h.engine.receive(trigger('1')); h.pump()

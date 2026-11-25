@@ -4,7 +4,7 @@ import type { HealthEntry } from '../infra/health.ts'
 import type { Effects } from './effects.ts'
 
 export interface PassesDeps {
-  readonly engine: Pick<Engine, 'receive' | 'evaluateDue'>
+  readonly engine: Pick<Engine, 'receive' | 'receiveForTicket' | 'evaluateDue'>
   readonly effects: Pick<Effects, 'kick' | 'idle'>
   readonly health: HealthEntry
   readonly lifetime: AbortSignal
@@ -34,6 +34,12 @@ export class Passes {
   receive(trigger: Trigger): ReceiveResult {
     if (this.host.closing()) throw new Error('Orchestrator is stopping')
     const result = this.host.engine.receive(trigger)
+    if (result === 'stored') this.request()
+    return result
+  }
+  receiveForTicket(trigger: Trigger, ticketId: string): ReceiveResult {
+    if (this.host.closing()) throw new Error('Orchestrator is stopping')
+    const result = this.host.engine.receiveForTicket(trigger, ticketId)
     if (result === 'stored') this.request()
     return result
   }

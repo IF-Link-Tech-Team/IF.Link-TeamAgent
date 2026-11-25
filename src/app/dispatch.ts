@@ -15,12 +15,36 @@ export interface DispatchRequest {
   text?: string
 }
 
+/** A concrete provider/model/effort for a bounded task (used by Source intake, not by a Worker Session). */
+export interface TaskModel { family: string; provider: string; model: string; effort?: string }
+
+/** Resolve a dispatch type to the first enabled family/model without turning on Worker dispatch. */
+export function taskModel(settings: Settings, type: string, difficulty: Difficulty = 'S'): TaskModel | undefined {
+  const selected = settings.dispatch.types.find(item => item.id === type)
+  if (!selected) return undefined
+  for (const familyId of selected.families) {
+    const family = settings.dispatch.families[familyId]
+    if (!family?.enabled) continue
+    const model = modelAt(family, difficulty)
+    if (!model) continue
+    const effort = settings.dispatch.models[model]?.effort
+    // Family ids used by this bounded path are provider ids (e.g. cilai-default); a DSH Worker
+    // route may not use the model, but a one-shot completion needs the provider explicitly.
+    return { family: familyId, provider: familyId, model, ...(effort ? { effort } : {}) }
+  }
+  return undefined
+}
+
 /** The route a ticket runs on, with enough detail to explain it in the panel and to audit it later. */
 export interface DispatchRoute {
   type: string
   difficulty: Difficulty
   family: string
+  /** Provider for a DSH Worker model override; empty means the executor default. */
+  provider?: string
   model: string
+  /** Reasoning effort from dispatch.models[model].effort, when configured. */
+  effort?: string
   harness: string
   account: string
   routeId: string
@@ -34,8 +58,11 @@ function fallback(settings: Settings, type: string, difficulty: Difficulty, reas
   const id = settings.dispatch.fallbackFamily
   const family = settings.dispatch.families[id]
   const model = family ? modelAt(family, difficulty) : ''
+  const effort = model ? settings.dispatch.models[model]?.effort : undefined
+  const provider = model && id !== 'deepseek' ? id : undefined
   const harness = family && settings.runtimes[family.harness]?.enabled ? family.harness : 'dsh'
-  return { type, difficulty, family: id, model, harness, account: family?.account ?? '', routeId: `${id}:${model || 'default'}`, degraded, reason }
+  return { type, difficulty, family: id, ...(provider ? { provider } : {}), model, ...(effort ? { effort } : {}),
+    harness, account: family?.account ?? '', routeId: `${id}:${model || 'default'}`, degraded, reason }
 }
 
 /** The nearest configured model for a difficulty: an empty slot borrows the closest one instead of dropping the family. */
@@ -97,8 +124,9 @@ export function chooseRoute(settings: Settings, request: DispatchRequest): Dispa
     if (!runtime?.enabled) continue
     // A DSH family may leave the model empty: the existing executor model and fallback chain still apply.
     if (!model && runtime.protocol !== 'dsh') continue
-    return { type, difficulty, family: id, model, harness, account: family.account,
-      routeId: `${id}:${model || 'default'}`, degraded: false, reason: `${type}/${difficulty} → ${id}` }
+    return { type, difficulty, family: id, ...(model && id !== 'deepseek' ? { provider: id } : {}), model,
+      ...(model && settings.dispatch.models[model]?.effort ? { effort: settings.dispatch.models[model]!.effort } : {}),
+      harness, account: family.account, routeId: `${id}:${model || 'default'}`, degraded: false, reason: `${type}/${difficulty} → ${id}` }
   }
   const reason = selected.strict
     ? `${type}/${difficulty}: no configured family is available and the type is strict`
