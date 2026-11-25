@@ -39,7 +39,7 @@ an extra work item for the request itself. Use
 Message: “下周五前把 Design Agent 的项目需求文档写完，今天开始。”
 
 - Title: `完成 Design Agent 项目需求文档`
-- Description: `基于现有项目资料整理需求范围、功能与验收要点，输出可评审的需求文档。`
+- Description: `基于现有项目资料整理需求范围与功能说明，输出可评审的需求文档。`
   (States the expected artifact; does not plan or do the work, and does not repeat the title.)
 
 Message: “建个工作项，提醒我周三前确认团建场地，湖区或牌区都行。”
