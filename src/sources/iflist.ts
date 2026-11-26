@@ -312,7 +312,7 @@ function firstJsonObject(raw: string): string | undefined {
  * One bounded extraction call, then one `iflist task propose`; no main Session, no Worker.
  * Returns true when a card was sent (or already existed), so the caller can advance without `ctx.receive`.
  */
-async function directIntake(ctx: SourceContext, item: InboxItem, signal: AbortSignal): Promise<'handled' | 'skip' | 'failed'> {
+async function directIntake(ctx: SourceContext, item: InboxItem, signal: AbortSignal): Promise<'handled' | 'skip' | 'failed' | 'limited'> {
   if (!ctx.complete || !item.text.trim()) return 'skip'
   const group = item.chatType !== 'p2p'
   if (group && item.addressed !== 'mention') return 'skip'
@@ -419,7 +419,8 @@ ${recent}
     return 'handled'
   } catch (error) {
     directNote = `cli: ${error instanceof Error ? error.message : String(error)}`.slice(0, 120)
-    return 'failed'
+    // 企业飞书 API 配额耗尽：不再发“补充字段”之类的回执，避免继续消耗配额。
+    return /\b429\b|rate.?limit|quota/i.test(directNote) ? 'limited' : 'failed'
   }
 }
 
@@ -456,15 +457,12 @@ export async function runIfList(ctx: SourceContext, signal: AbortSignal): Promis
           if (config.directIntake && addressed) {
             const outcome = await directIntake(ctx, item, signal)
             after = item.seq
-            if (outcome === 'handled') continue
+            if (outcome === 'handled' || outcome === 'limited') continue
             if (outcome === 'failed') {
               // 任务管理失败时不回退 Worker：只问一句，避免把“建卡”变成“执行任务”。
               const trigger = iflistTrigger(item)
-              const limited = /429|rate.?limit/i.test(directNote)
               ctx.notify({ id: `direct-failed:${item.messageId}`, channel: trigger.channel!, kind: 'reply',
-                text: limited
-                  ? '这项工作项已经识别出来，但飞书接口正在限流，卡片暂时没发出去。请稍后重发。'
-                  : '这条我暂时没能整理成工作项。请补充“项目 / 负责人 / 开始或截止时间”后重发。' })
+                text: '这条我暂时没能整理成工作项。请补充“项目 / 负责人 / 开始或截止时间”后重发。' })
               continue
             }
             // 'skip'：不是任务（闲聊/感谢），仍交给 Team Agent 的既有判断。
